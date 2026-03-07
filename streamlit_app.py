@@ -520,7 +520,7 @@ function toggleRecording(){
   var sa=document.getElementById('save-area');
   if(_lickRec){
     _lickRec=false;
-    btn.innerHTML='&#9210; Record';
+    btn.innerHTML='&#9210; Start';
     btn.style.background=_btnBg;btn.style.color=_btnFg;
     if(_lickNotes.length>0) sa.style.display='flex';
   }else{
@@ -593,7 +593,7 @@ function _renderLickList(){
   var el=document.getElementById('lick-list');if(!el)return;
   var names=Object.keys(_savedLicks);
   if(!names.length){
-    el.innerHTML='<span style="color:#888;font-size:12px;font-style:italic">No licks saved yet \u2014 record one above</span>';
+    el.innerHTML='';
     return;
   }
   el.innerHTML=names.map(function(n){
@@ -798,10 +798,10 @@ def build_fretboard_html():
 
         # Divider + Record
         f'<hr style="border:none;border-top:1px solid {bdr_col};margin:10px 0 8px">'
-        f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Lick Recorder</div>'
-        f'<button id="rec-btn" onclick="toggleRecording()" style="{rbs}">&#9210; Record</button>'
+        f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Recorder</div>'
+        f'<button id="rec-btn" onclick="toggleRecording()" style="{rbs}">&#9210; Start</button>'
         f'<div id="save-area" style="display:none;flex-direction:column;gap:5px;margin-top:6px;margin-bottom:8px">'
-        f'<input id="lick-name" placeholder="Name this lick..." style="{ins}"'
+        f'<input id="lick-name" placeholder="Name" style="{ins}"'
         f' onkeydown="if(event.key===\'Enter\')saveLick()"/>'
         f'<button onclick="saveLick()" style="{sbs}">Save</button>'
         f'</div>'
