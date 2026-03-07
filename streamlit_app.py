@@ -761,9 +761,9 @@ def build_fretboard_html():
     lick_panel = (
         f'<script>var _btnBg="{btn_bg}",_btnFg="{btn_fg}",_lblFg="{lbl_fg}",'
         f'_nStrings={get_n_strings()},_N_FRETS={N_FRETS},_STRING_NOTES={sn_js},_STRING_FREQS={sf_js};</script>'
-        f'<div style="width:200px;flex-shrink:0;border-left:1px solid {bdr_col};'
+        f'<div id="right-panel" style="width:200px;border-left:1px solid {bdr_col};'
         f'padding:10px 12px;font-family:Arial;color:{lbl_fg};'
-        f'height:calc(100vh - 20px);box-sizing:border-box;overflow-y:auto">'
+        f'height:100%;box-sizing:border-box;display:flex;flex-direction:column">'
         
         f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Chord Progression</div>'
         f'<input id="chord-prog" placeholder="Am F C G  or  A minor, F major, C@5" style="{ins}"'
@@ -800,18 +800,19 @@ def build_fretboard_html():
         f'<button onclick="saveLick()" style="{sbs}">Save</button>'
         f'</div>'
         
-        f'<div id="lick-list"></div>'
+        f'<div id="lick-list" style="flex-grow:1;overflow-y:auto;min-height:0"></div>'
         f'</div>'
     )
 
     return (
         f'<!DOCTYPE html><html><head>'
-        f'<style>body{{margin:0;background:{bg};overflow-x:auto;overflow-y:hidden}}</style>'
+        f'<style>body{{margin:0;background:{bg};overflow-x:auto;overflow-y:hidden}}'
+        f'table{{border-collapse:collapse}}td{{padding:0;vertical-align:top}}</style>'
         f'</head><body>'
-        f'<div style="display:flex;align-items:flex-start;height:{svg_h}px">'
-        f'{build_svg()}'
-        f'{lick_panel}'
-        f'</div>'
+        f'<table style="height:{svg_h}px"><tr style="height:{svg_h}px">'
+        f'<td>{build_svg()}</td>'
+        f'<td style="width:200px">{lick_panel}</td>'
+        f'</tr></table>'
         f'{_KS_JS}</body></html>'
     )
 
