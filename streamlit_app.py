@@ -829,11 +829,6 @@ def build_fretboard_html():
     )
 
 
-def btn(label, key, active=False, use_width=True):
-    """Shortcut: returns True if clicked; type=primary when active."""
-    t = "primary" if active else "secondary"
-    return st.button(label, key=key, type=t, use_container_width=use_width)
-
 def main():
     st.set_page_config(page_title="Guitar Fretboard", layout="wide")
     init_state()
@@ -841,163 +836,89 @@ def main():
 
     st.title("Guitar Fretboard Visualizer")
 
-    st.components.v1.html(build_fretboard_html(), height=get_svg_h() + 20, scrolling=False)
+    # ── Row 1: Root | Type | Name | Labels | Instrument ──────────────────────
+    c_root, c_type, c_name, c_lbl, c_inst = st.columns(5)
 
-    st.divider()
+    root_val = c_root.selectbox("Root", ["—"] + NOTES, key="sel_root")
 
-    
-    util_cols = st.columns([1, 4, 4, 4])
-    util_cols[0].markdown("**Display**")
-    lbl_text = "Show Intervals" if s.label_mode == 'note' else "Show Note Names"
-    if util_cols[1].button(lbl_text, key="lbl", use_container_width=True):
-        s.label_mode = 'interval' if s.label_mode == 'note' else 'note'
+    type_val = c_type.selectbox("Type", ["All Notes", "Chord", "Scale", "Mode"], key="sel_type")
+
+    if type_val == "Chord":
+        name_opts, name_key = list(CHORD_INTERVALS.keys()), "sel_name_chord"
+    elif type_val == "Scale":
+        name_opts, name_key = NAMED_SCALES, "sel_name_scale"
+    elif type_val == "Mode":
+        name_opts, name_key = MODE_SCALES, "sel_name_mode"
+    else:
+        name_opts, name_key = None, None
+
+    if name_opts:
+        name_val = c_name.selectbox("Name", name_opts, key=name_key)
+    else:
+        c_name.selectbox("Name", ["—"], disabled=True, key="sel_name_none")
+        name_val = None
+
+    labels_val = c_lbl.selectbox("Labels", ["Note Names", "Intervals"], key="sel_labels")
+    inst_val   = c_inst.selectbox("Instrument", ["Guitar", "Bass"], key="sel_inst")
+
+    # ── Row 2: CAGED | Triads | Theme | Clear ─────────────────────────────────
+    is_bass_now = inst_val == "Bass"
+    c_caged, c_tri, c_theme, c_clr = st.columns(4)
+
+    if not is_bass_now:
+        caged_val = c_caged.multiselect("CAGED Shapes", list(CAGED_SHAPES.keys()), key="sel_caged")
+    else:
+        caged_val = []
+
+    triad_map = ({0: "G-D-A", 1: "D-A-E"} if is_bass_now
+                 else {0: "e-B-G", 1: "B-G-D", 2: "G-D-A", 3: "D-A-E"})
+    triad_val = c_tri.multiselect("Triads", list(triad_map.values()), key="sel_triads")
+
+    theme_val     = c_theme.selectbox("Theme", ["Light", "Dark"], key="sel_theme")
+    c_clr.write("")
+    clear_clicked = c_clr.button("Clear", use_container_width=True)
+
+    # ── Apply widget values to session state ──────────────────────────────────
+    new_inst = 'bass' if is_bass_now else 'guitar'
+    if new_inst != s.instrument:
+        s.instrument = new_inst
+        s.caged      = set()
+        s.triad_grps = set()
+        for k in ('sel_caged', 'sel_triads'):
+            st.session_state.pop(k, None)
         st.rerun()
 
-    dark_text = "Light Mode" if s.dark else "Dark Mode"
-    if util_cols[2].button(dark_text, key="btn_dark", use_container_width=True):
-        s.dark = not s.dark
-        st.rerun()
+    if root_val != "—":
+        s.root = root_val
 
-    if util_cols[3].button("Clear", key="clear", use_container_width=True):
+    if type_val == "All Notes":
+        s.view = 'root' if root_val != "—" else 'all'
+    elif type_val == "Chord" and name_val:
+        s.view  = 'chord'
+        s.chord = name_val
+    elif type_val in ("Scale", "Mode") and name_val:
+        s.view  = 'scale'
+        s.scale = name_val
+
+    s.caged      = set(caged_val)
+    inv_triad    = {v: k for k, v in triad_map.items()}
+    s.triad_grps = {inv_triad[t] for t in triad_val if t in inv_triad}
+    s.hide_notes = bool(s.triad_grps)
+    s.label_mode = 'interval' if labels_val == "Intervals" else 'note'
+    s.dark       = theme_val == "Dark"
+
+    if clear_clicked:
+        for k in ('sel_root', 'sel_type', 'sel_name_chord', 'sel_name_scale',
+                  'sel_name_mode', 'sel_name_none', 'sel_caged', 'sel_triads'):
+            st.session_state.pop(k, None)
+        s.view       = 'all'
         s.caged      = set()
         s.triad_grps = set()
         s.hide_notes = False
-        s.view       = 'all'
         st.rerun()
 
-    
-    inst_cols = st.columns([1, 6, 6])
-    inst_cols[0].markdown("**Instrument**")
-    if inst_cols[1].button("Guitar", key="inst_guitar",
-                           type="primary" if not _is_bass() else "secondary",
-                           use_container_width=True):
-        if _is_bass():
-            s.instrument = 'guitar'
-            s.triad_grps = set()
-            st.rerun()
-    if inst_cols[2].button("Bass", key="inst_bass",
-                           type="primary" if _is_bass() else "secondary",
-                           use_container_width=True):
-        if not _is_bass():
-            s.instrument = 'bass'
-            s.caged      = set()
-            s.triad_grps = set()
-            st.rerun()
-
-    
-    root_cols = st.columns([1] + [1] * 12)
-    root_cols[0].markdown("**Root**")
-    for i, note in enumerate(NOTES):
-        active_root = note == s.root and s.view in ('root', 'scale', 'chord')
-        if root_cols[i + 1].button(note, key=f"r_{note}",
-                                   type="primary" if active_root else "secondary",
-                                   use_container_width=True):
-            if s.view == 'all':
-                s.root = note
-                s.view = 'root'
-            elif s.view == 'root' and s.root == note:
-                s.view = 'all'
-            else:
-                s.root = note
-            st.rerun()
-
-    
-    mode_cols = st.columns([1] + [12/len(MODE_SCALES)] * len(MODE_SCALES))
-    mode_cols[0].markdown("**Modes**")
-    for i, scale in enumerate(MODE_SCALES):
-        active = s.view == 'scale' and s.scale == scale
-        if mode_cols[i + 1].button(scale, key=f"m_{scale}",
-                                   type="primary" if active else "secondary",
-                                   use_container_width=True):
-            if active:
-                s.view = 'all'
-                s.triad_grps = set()
-                s.caged = set()
-            else:
-                s.scale = scale
-                s.view  = 'scale'
-                s.caged = set()
-            st.rerun()
-
-    
-    scale_cols = st.columns([1] + [12/len(NAMED_SCALES)] * len(NAMED_SCALES))
-    scale_cols[0].markdown("**Scales**")
-    for i, scale in enumerate(NAMED_SCALES):
-        active = s.view == 'scale' and s.scale == scale
-        if scale_cols[i + 1].button(scale, key=f"s_{scale}",
-                                    type="primary" if active else "secondary",
-                                    use_container_width=True):
-            if active:
-                s.view = 'all'
-                s.triad_grps = set()
-                s.caged = set()
-            else:
-                s.scale = scale
-                s.view  = 'scale'
-                s.caged = set()
-            st.rerun()
-
-    
-    chord_list = list(CHORD_INTERVALS.keys())
-    chord_cols = st.columns([1] + [12/len(chord_list)] * len(chord_list))
-    chord_cols[0].markdown("**Chords**")
-    for i, chord in enumerate(chord_list):
-        active = s.view == 'chord' and s.chord == chord
-        if chord_cols[i + 1].button(chord, key=f"c_{chord}",
-                                    type="primary" if active else "secondary",
-                                    use_container_width=True):
-            if active:
-                s.view = 'all'
-                s.triad_grps = set()
-            else:
-                s.chord = chord
-                s.view  = 'chord'
-            st.rerun()
-
-    
-    if not _is_bass():
-        all_shapes  = set(CAGED_SHAPES.keys())
-        shape_names = list(CAGED_SHAPES.keys()) + ['All']
-        caged_cols  = st.columns([1] + [12/len(shape_names)] * len(shape_names))
-        caged_cols[0].markdown("**CAGED**")
-        for i, shape in enumerate(shape_names):
-            label  = "All Shapes" if shape == 'All' else f"{shape} Shape"
-            active = (s.caged == all_shapes) if shape == 'All' else (shape in s.caged)
-            if caged_cols[i + 1].button(label, key=f"cg_{shape}",
-                                        type="primary" if active else "secondary",
-                                        use_container_width=True):
-                if shape == 'All':
-                    s.caged = set() if s.caged == all_shapes else set(all_shapes)
-                else:
-                    s.caged = (s.caged - {shape}) if shape in s.caged else (s.caged | {shape})
-                st.rerun()
-
-    
-    
-    if _is_bass():
-        group_labels = {0: 'G-D-A', 1: 'D-A-E'}
-    else:
-        group_labels = {0: 'e-B-G', 1: 'B-G-D', 2: 'G-D-A', 3: 'D-A-E'}
-    n_triad_btns = 1 + len(group_labels)  
-    triad_cols = st.columns([1] + [12/n_triad_btns] * n_triad_btns)
-    triad_cols[0].markdown("**Triads**")
-    hide_label = "Show Notes" if s.hide_notes else "Hide Notes"
-    if triad_cols[1].button(hide_label, key="btn_hide_notes", use_container_width=True):
-        s.hide_notes = not s.hide_notes
-        st.rerun()
-
-    for col_i, (gid, glabel) in enumerate(group_labels.items(), start=2):
-        active = gid in s.triad_grps
-        if triad_cols[col_i].button(glabel, key=f"tg_{gid}",
-                                    type="primary" if active else "secondary",
-                                    use_container_width=True):
-            if gid in s.triad_grps:
-                s.triad_grps = s.triad_grps - {gid}
-                if not s.triad_grps:
-                    s.hide_notes = False
-            else:
-                s.triad_grps = s.triad_grps | {gid}
-            st.rerun()
+    # ── Fretboard ──────────────────────────────────────────────────────────────
+    st.components.v1.html(build_fretboard_html(), height=get_svg_h() + 20, scrolling=False)
 
 
 main()
