@@ -609,7 +609,7 @@ function _renderLickList(){
       '</div>'+tabHtml+'</div>';
   }).join('');
 }
-var _metro={running:false,bpm:120,beats:4,tick:0,timeout:null};
+var _metro={running:false,bpm:120,beats:4,denom:4,tick:0,timeout:null};
 function _metroTick(){
   if(!_metro.running)return;
   var ctx=_getCtx();
@@ -621,18 +621,21 @@ function _metroTick(){
   gain.gain.setValueAtTime(isAccent?0.4:0.25,ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.06);
   osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.08);
-  _metro.timeout=setTimeout(_metroTick,60000/_metro.bpm);
+  _metro.timeout=setTimeout(_metroTick,60000/_metro.bpm*(4/_metro.denom));
 }
 function toggleMetronome(){
   var btn=document.getElementById('metro-btn');
   if(_metro.running){
     _metro.running=false;clearTimeout(_metro.timeout);
+    btn.innerHTML='&#9833; Start';
     btn.style.background=_btnBg;btn.style.color=_btnFg;
   }else{
     _metro.running=true;_metro.tick=0;
     _metro.bpm=parseInt(document.getElementById('metro-bpm').value)||120;
     _metro.beats=parseInt(document.getElementById('metro-top').value)||4;
+    _metro.denom=parseInt(document.getElementById('metro-bot').value)||4;
     _metroTick();
+    btn.innerHTML='&#9632; Stop';
     btn.style.background='#0066cc';btn.style.color='white';
   }
 }
@@ -640,9 +643,9 @@ function _metroUpdate(){
   if(_metro.running){
     _metro.bpm=parseInt(document.getElementById('metro-bpm').value)||120;
     _metro.beats=parseInt(document.getElementById('metro-top').value)||4;
+    _metro.denom=parseInt(document.getElementById('metro-bot').value)||4;
   }
 }
-
 var _NOTES_JS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
 var _CHORD_IVALS={
@@ -763,26 +766,12 @@ def build_fretboard_html():
         f'_nStrings={get_n_strings()},_N_FRETS={N_FRETS},_STRING_NOTES={sn_js},_STRING_FREQS={sf_js};</script>'
         f'<div id="right-panel" style="width:200px;border-left:1px solid {bdr_col};'
         f'padding:10px 12px;font-family:Arial;color:{lbl_fg};'
-        f'height:100%;box-sizing:border-box;display:flex;flex-direction:column">'
-        
-        f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Chord Progression</div>'
-        f'<input id="chord-prog" placeholder="Am F C G  or  A minor, F major, C@5" style="{ins}"'
-        f' onkeydown="if(event.key===\'Enter\')playProgression()">'
-        f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:wrap">'
-        f'<button id="prog-btn" onclick="playProgression()" style="{sbs}">&#9654; Play</button>'
-        f'<span style="font-size:11px">Beats/chord</span>'
-        f'<input id="prog-beats" type="number" value="4" min="1" max="32"'
-        f' style="{nis}width:34px">'
-        f'</div>'
-        
-        f'<hr style="border:none;border-top:1px solid {bdr_col};margin:10px 0 8px">'
-        
-        f'<div style="display:flex;gap:6px;margin-bottom:6px">'
-        f'<button id="rec-btn" onclick="toggleRecording()" style="{rbs}">&#9210; Record</button>'
-        f'<button id="metro-btn" onclick="toggleMetronome()" style="{rbs}">&#9833; Metro</button>'
-        f'</div>'
-        
-        f'<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;font-size:11px">'
+        f'height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden">'
+
+        # Metronome
+        f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Metronome</div>'
+        f'<button id="metro-btn" onclick="toggleMetronome()" style="{rbs}">&#9833; Start</button>'
+        f'<div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:11px">'
         f'<span>BPM</span>'
         f'<input id="metro-bpm" type="number" value="120" min="40" max="240"'
         f' oninput="_metroUpdate()" style="{nis}width:44px">'
@@ -791,16 +780,34 @@ def build_fretboard_html():
         f' oninput="_metroUpdate()" style="{nis}width:28px">'
         f'<span>/</span>'
         f'<input id="metro-bot" type="number" value="4" min="1" max="32"'
-        f' style="{nis}width:28px">'
+        f' oninput="_metroUpdate()" style="{nis}width:28px">'
         f'</div>'
-        
-        f'<div id="save-area" style="display:none;flex-direction:column;gap:5px;margin-bottom:8px">'
+
+        # Divider
+        f'<hr style="border:none;border-top:1px solid {bdr_col};margin:10px 0 8px">'
+
+        # Chord progression
+        f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Chord Progression</div>'
+        f'<input id="chord-prog" placeholder="Am F C G - Am  (- = rest)" style="{ins}"'
+        f' onkeydown="if(event.key===\'Enter\')playProgression()">'
+        f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px">'
+        f'<button id="prog-btn" onclick="playProgression()" style="{sbs}">&#9654; Play</button>'
+        f'<span style="font-size:11px">beats</span>'
+        f'<input id="prog-beats" type="number" value="4" min="1" max="32" style="{nis}width:34px" title="Beats/chord">'
+        f'</div>'
+
+        # Divider + Record
+        f'<hr style="border:none;border-top:1px solid {bdr_col};margin:10px 0 8px">'
+        f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Lick Recorder</div>'
+        f'<button id="rec-btn" onclick="toggleRecording()" style="{rbs}">&#9210; Record</button>'
+        f'<div id="save-area" style="display:none;flex-direction:column;gap:5px;margin-top:6px;margin-bottom:8px">'
         f'<input id="lick-name" placeholder="Name this lick..." style="{ins}"'
         f' onkeydown="if(event.key===\'Enter\')saveLick()"/>'
         f'<button onclick="saveLick()" style="{sbs}">Save</button>'
         f'</div>'
-        
-        f'<div id="lick-list" style="flex-grow:1;overflow-y:auto;min-height:0"></div>'
+
+        # Lick list (grows to fill)
+        f'<div id="lick-list" style="flex-grow:1;overflow-y:auto;min-height:0;margin-top:6px"></div>'
         f'</div>'
     )
 
