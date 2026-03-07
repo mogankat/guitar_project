@@ -589,23 +589,28 @@ function _genTab(lick){
   return labels.map(function(l,i){return l+'|'+rows[i]+'-|';}).join('\\n');
 }
 
+function _toggleTab(i){
+  var e=document.getElementById('lt'+i);
+  if(e)e.style.display=e.style.display==='none'?'block':'none';
+}
 function _renderLickList(){
   var el=document.getElementById('lick-list');if(!el)return;
   var names=Object.keys(_savedLicks);
-  if(!names.length){
-    el.innerHTML='';
-    return;
-  }
-  el.innerHTML=names.map(function(n){
+  if(!names.length){el.innerHTML='';return;}
+  el.innerHTML=names.map(function(n,i){
     var esc=n.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
     var tab=_genTab(_savedLicks[n]);
     var tabHtml=tab
-      ?'<pre style="margin:3px 0 0;font-size:11px;line-height:1.35;color:'+_lblFg+';font-family:monospace">'+tab+'</pre>'
+      ?'<pre id="lt'+i+'" style="display:none;margin:2px 0 0;font-size:11px;line-height:1.35;color:'+_lblFg+';font-family:monospace;white-space:pre;overflow-x:auto">'+tab+'</pre>'
       :'';
-    return '<div style="margin:6px 0 8px">'+
-      '<div style="display:flex;align-items:center;gap:5px">'+
-      '<button onclick="playLick(&quot;'+esc+'&quot;)" style="padding:3px 12px;font-size:12px;cursor:pointer;border:1px solid #888;border-radius:3px;background:'+_btnBg+';color:'+_btnFg+'">&#9654; '+n+'</button>'+
-      '<button onclick="deleteLick(&quot;'+esc+'&quot;)" title="Delete" style="padding:3px 8px;font-size:12px;cursor:pointer;border:1px solid #888;border-radius:3px;background:'+_btnBg+';color:#e05050;">&#10005;</button>'+
+    var tabBtn=tab
+      ?'<button onclick="_toggleTab('+i+')" style="padding:2px 5px;font-size:10px;cursor:pointer;border:1px solid #888;border-radius:3px;background:'+_btnBg+';color:'+_btnFg+'">tab</button>'
+      :'';
+    return '<div style="margin:3px 0">'+
+      '<div style="display:flex;align-items:center;gap:4px">'+
+      '<button onclick="playLick(&quot;'+esc+'&quot;)" style="padding:3px 8px;font-size:11px;cursor:pointer;border:1px solid #888;border-radius:3px;background:'+_btnBg+';color:'+_btnFg+'">&#9654; '+n+'</button>'+
+      tabBtn+
+      '<button onclick="deleteLick(&quot;'+esc+'&quot;)" title="Delete" style="padding:2px 6px;font-size:11px;cursor:pointer;border:1px solid #888;border-radius:3px;background:'+_btnBg+';color:#e05050;">&#10005;</button>'+
       '</div>'+tabHtml+'</div>';
   }).join('');
 }
