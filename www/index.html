@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1e1e1e">
+<title>Guitar Fretboard</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #1e1e1e; --fg: #e0e0e0; --accent: #2980b9;
+  --panel-bg: #2a2a2a; --input-bg: #333; --input-fg: #eee;
+  --btn-bg: #444; --btn-fg: #fff; --border: #555;
+  --string-color: #daa520; --fret-color: #888; --marker-color: #666;
+  --menu-width: 300px;
+}
+html, body {
+  height: 100%; width: 100%; overflow: hidden;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Main layout ── */
+#app { display: flex; flex-direction: column; height: 100dvh; width: 100vw; overflow: hidden; }
+#fretboard-container {
+  flex: 1; overflow: hidden; position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+#fretboard-container svg { width: 100%; height: 100%; display: block; }
+
+/* ── Floating menu button (bottom-right, away from fretboard content) ── */
+#menu-toggle {
+  position: fixed; bottom: 10px; right: 10px; z-index: 50;
+  background: var(--panel-bg); border: 1px solid var(--border); color: var(--fg);
+  font-size: 20px; width: 36px; height: 36px; border-radius: 50%;
+  cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center;
+  opacity: 0.6;
+}
+#menu-toggle:active { opacity: 1; }
+
+/* ── Info display (hidden — shown inside fretboard SVG instead) ── */
+#info-display { display: none; }
+
+/* ── Slide-out menu ── */
+#menu-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.5);
+}
+#menu-overlay.open { display: block; }
+#menu-panel {
+  position: fixed; top: 0; right: -320px; bottom: 0; width: var(--menu-width);
+  max-width: 85vw; background: var(--panel-bg); z-index: 101;
+  transition: right 0.25s ease; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 14px 80px;
+}
+#menu-panel.open { right: 0; }
+
+/* ── Menu sections ── */
+.menu-section { margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.menu-section:last-child { border-bottom: none; }
+.menu-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.menu-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.menu-label { font-size: 12px; min-width: 50px; color: #aaa; }
+
+select, input[type="number"], input[type="text"] {
+  background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px 8px; font-size: 13px; -webkit-appearance: none;
+}
+select { padding-right: 24px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%23999' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; }
+input[type="number"] { width: 52px; }
+input[type="text"] { width: 100%; }
+
+.btn {
+  background: var(--btn-bg); color: var(--btn-fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  white-space: nowrap;
+}
+.btn:active { opacity: 0.7; }
+.btn-active { background: #0066cc; color: white; border-color: #0066cc; }
+.btn-danger { background: #cc0000; color: white; border-color: #cc0000; }
+.btn-sm { padding: 4px 8px; font-size: 11px; }
+
+/* ── Chip toggles (CAGED, Triads) ── */
+.chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 5px 10px; border-radius: 16px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1.5px solid var(--border); background: var(--input-bg); color: var(--fg);
+  user-select: none; -webkit-user-select: none;
+}
+.chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* ── Lick list ── */
+#lick-list .lick-item { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+#lick-list .lick-item button { flex-shrink: 0; }
+#lick-list pre {
+  font-size: 10px; line-height: 1.3; color: #aaa; font-family: monospace;
+  white-space: pre; overflow-x: auto; margin: 2px 0 6px; padding: 4px;
+  background: var(--input-bg); border-radius: 4px;
+}
+
+/* ── Light theme ── */
+body.light {
+  --bg: #f5f5f5; --fg: #222; --accent: #2980b9;
+  --panel-bg: #fff; --input-bg: #f0f0f0; --input-fg: #222;
+  --btn-bg: #e8e8e8; --btn-fg: #222; --border: #ccc;
+  --string-color: #8B4513; --fret-color: #aaa; --marker-color: #bbb;
+}
+
+/* ── Landscape adjustments ── */
+@media (orientation: landscape) and (max-height: 500px) {
+  #menu-toggle { bottom: 6px; right: 6px; width: 30px; height: 30px; font-size: 16px; }
+}
+</style>
+</head>
+<body class="dark">
+<div id="app">
+  <div id="fretboard-container"></div>
+</div>
+<div id="info-display">All Notes</div>
+<button id="menu-toggle" aria-label="Open menu">☰</button>
+
+<!-- Slide-out menu -->
+<div id="menu-overlay">
+  <div id="menu-panel">
+
+    <!-- Fretboard Settings -->
+    <div class="menu-section">
+      <h3>Fretboard</h3>
+      <div class="menu-row">
+        <span class="menu-label">Root</span>
+        <select id="sel-root" onchange="onSettingChange()">
+          <option value="">—</option>
+        </select>
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Type</span>
+        <select id="sel-type" onchange="onTypeChange()">
+          <option value="all">All Notes</option>
+          <option value="chord">Chord</option>
+          <option value="scale">Scale</option>
+          <option value="mode">Mode</option>
+        </select>
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Name</span>
+        <select id="sel-name" onchange="onSettingChange()"></select>
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Labels</span>
+        <select id="sel-labels" onchange="onSettingChange()">
+          <option value="note">Note Names</option>
+          <option value="interval">Intervals</option>
+        </select>
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Instrument</span>
+        <select id="sel-instrument" onchange="onInstrumentChange()">
+          <option value="guitar">Guitar</option>
+          <option value="bass">Bass</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- CAGED -->
+    <div class="menu-section" id="caged-section">
+      <h3>CAGED Shapes</h3>
+      <div class="chip-group" id="caged-chips"></div>
+    </div>
+
+    <!-- Triads -->
+    <div class="menu-section">
+      <h3>Triads</h3>
+      <div class="chip-group" id="triad-chips"></div>
+    </div>
+
+    <!-- Metronome -->
+    <div class="menu-section">
+      <h3>Metronome</h3>
+      <div class="menu-row">
+        <button class="btn" id="metro-btn" onclick="toggleMetronome()">♩ Start</button>
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">BPM</span>
+        <input id="metro-bpm" type="number" value="120" min="40" max="240" oninput="metroUpdate()">
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Time</span>
+        <input id="metro-top" type="number" value="4" min="1" max="12" style="width:40px" oninput="metroUpdate()">
+        <span>/</span>
+        <input id="metro-bot" type="number" value="4" min="1" max="32" style="width:40px" oninput="metroUpdate()">
+      </div>
+    </div>
+
+    <!-- Chord Progression -->
+    <div class="menu-section">
+      <h3>Chord Progression</h3>
+      <div class="menu-row">
+        <input id="chord-prog" type="text" placeholder="Am F C G" onkeydown="if(event.key==='Enter')playProgression()">
+      </div>
+      <div class="menu-row">
+        <button class="btn" id="prog-btn" onclick="playProgression()">▶ Play</button>
+        <span class="menu-label">Beats</span>
+        <input id="prog-beats" type="number" value="4" min="1" max="32" style="width:44px">
+      </div>
+    </div>
+
+    <!-- Recorder -->
+    <div class="menu-section">
+      <h3>Recorder</h3>
+      <div class="menu-row">
+        <button class="btn" id="rec-btn" onclick="toggleRecording()">⏲ Start</button>
+      </div>
+      <div id="save-area" style="display:none">
+        <div class="menu-row">
+          <input id="lick-name" type="text" placeholder="Lick name" onkeydown="if(event.key==='Enter')saveLick()">
+        </div>
+        <div class="menu-row">
+          <button class="btn" onclick="saveLick()">Save</button>
+        </div>
+      </div>
+      <div id="lick-list"></div>
+    </div>
+
+    <!-- Theme -->
+    <div class="menu-section">
+      <h3>Theme</h3>
+      <div class="menu-row">
+        <select id="sel-theme" onchange="onThemeChange()">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+      <div class="menu-row" style="margin-top:8px">
+        <button class="btn" onclick="clearAll()">Clear All</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════════════════════
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+const INSTRUMENTS = {
+  guitar: { notes: ['E','B','G','D','A','E'], freqs: [329.63,246.94,196.00,146.83,110.00,82.41] },
+  bass:   { notes: ['G','D','A','E'],         freqs: [98.00,73.42,55.00,41.20] }
+};
+
+const SCALE_INTERVALS = {
+  Ionian:[0,2,4,5,7,9,11], Dorian:[0,2,3,5,7,9,10], Phrygian:[0,1,3,5,7,8,10],
+  Lydian:[0,2,4,6,7,9,11], Mixolydian:[0,2,4,5,7,9,10], Aeolian:[0,2,3,5,7,8,10],
+  Locrian:[0,1,3,5,6,8,10],
+  'Nat Minor':[0,2,3,5,7,8,10], 'Harm Minor':[0,2,3,5,7,8,11], 'Mel Minor':[0,2,3,5,7,9,11],
+  'Maj Pent':[0,2,4,7,9], 'Min Pent':[0,3,5,7,10],
+  'Maj Blues':[0,2,3,4,7,9], 'Min Blues':[0,3,5,6,7,10]
+};
+const CHORD_INTERVALS = {
+  Major:[0,4,7], Minor:[0,3,7], Sus4:[0,5,7], Sus2:[0,2,7],
+  Aug:[0,4,8], Dim:[0,3,6], Add9:[0,4,7,2], '7':[0,4,7,10]
+};
+
+const SCALE_DEGREES = {
+  Ionian:{0:'1',2:'2',4:'3',5:'4',7:'5',9:'6',11:'7'},
+  Dorian:{0:'1',2:'2',3:'b3',5:'4',7:'5',9:'6',10:'b7'},
+  Phrygian:{0:'1',1:'b2',3:'b3',5:'4',7:'5',8:'b6',10:'b7'},
+  Lydian:{0:'1',2:'2',4:'3',6:'#4',7:'5',9:'6',11:'7'},
+  Mixolydian:{0:'1',2:'2',4:'3',5:'4',7:'5',9:'6',10:'b7'},
+  Aeolian:{0:'1',2:'2',3:'b3',5:'4',7:'5',8:'b6',10:'b7'},
+  Locrian:{0:'1',1:'b2',3:'b3',5:'4',6:'b5',8:'b6',10:'b7'},
+  'Nat Minor':{0:'1',2:'2',3:'b3',5:'4',7:'5',8:'b6',10:'b7'},
+  'Harm Minor':{0:'1',2:'2',3:'b3',5:'4',7:'5',8:'b6',11:'7'},
+  'Mel Minor':{0:'1',2:'2',3:'b3',5:'4',7:'5',9:'6',11:'7'},
+  'Maj Pent':{0:'1',2:'2',4:'3',7:'5',9:'6'},
+  'Min Pent':{0:'1',3:'b3',5:'4',7:'5',10:'b7'},
+  'Maj Blues':{0:'1',2:'2',3:'b3',4:'3',7:'5',9:'6'},
+  'Min Blues':{0:'1',3:'b3',5:'4',6:'b5',7:'5',10:'b7'}
+};
+const CHORD_DEGREES = {
+  Major:{0:'R',4:'3',7:'5'}, Minor:{0:'R',3:'b3',7:'5'},
+  Sus4:{0:'R',5:'4',7:'5'}, Sus2:{0:'R',2:'2',7:'5'},
+  Aug:{0:'R',4:'3',8:'#5'}, Dim:{0:'R',3:'b3',6:'b5'},
+  Add9:{0:'R',4:'3',7:'5',2:'9'}, '7':{0:'R',4:'3',7:'5',10:'b7'}
+};
+
+const INTERVAL_COLORS = {
+  R:'#27ae60','1':'#27ae60','3':'#2980b9',b3:'#e74c3c',
+  '5':'#2980b9',b5:'#e74c3c','#5':'#e74c3c','9':'#e74c3c',
+  b7:'#e74c3c','7':'#e74c3c','4':'#e74c3c','2':'#e74c3c',
+  b2:'#e74c3c','#4':'#e74c3c','6':'#e74c3c',b6:'#e74c3c'
+};
+const GROUP_COLORS = {0:'#ff6600',1:'#9900cc',2:'#0066ff',3:'#009900'};
+const BOX_COLORS = {C:'#ff6600',A:'#9900cc',G:'#0066ff',E:'#009900',D:'#cc0000'};
+
+const CAGED_SHAPES = {
+  C:{pattern:[0,1,0,2,3,-1],root_string:4,root_fret_in_pattern:3},
+  A:{pattern:[0,2,2,2,0,-1],root_string:4,root_fret_in_pattern:0},
+  G:{pattern:[3,3,0,0,2,3],root_string:5,root_fret_in_pattern:3},
+  E:{pattern:[0,0,1,2,2,0],root_string:5,root_fret_in_pattern:0},
+  D:{pattern:[2,3,2,0,-1,-1],root_string:3,root_fret_in_pattern:0}
+};
+
+const MODE_SCALES = ['Ionian','Dorian','Phrygian','Lydian','Mixolydian','Aeolian','Locrian'];
+const NAMED_SCALES = ['Nat Minor','Harm Minor','Mel Minor','Maj Pent','Min Pent','Maj Blues','Min Blues'];
+
+const N_FRETS = 15;
+
+// Chord progression parser intervals (same as original)
+const PROG_CHORD_IVALS = {
+  '':[0,4,7],major:[0,4,7],maj:[0,4,7],m:[0,3,7],minor:[0,3,7],min:[0,3,7],
+  '5':[0,7],'7':[0,4,7,10],dominant7:[0,4,7,10],dom7:[0,4,7,10],
+  maj7:[0,4,7,11],major7:[0,4,7,11],m7:[0,3,7,10],minor7:[0,3,7,10],min7:[0,3,7,10],
+  minormajor7:[0,3,7,11],mm7:[0,3,7,11],
+  sus2:[0,2,7],suspended2:[0,2,7],sus4:[0,5,7],suspended4:[0,5,7],
+  aug:[0,4,8],augmented:[0,4,8],'+':[0,4,8],
+  dim:[0,3,6],diminished:[0,3,6],o:[0,3,6],
+  dim7:[0,3,6,9],diminished7:[0,3,6,9],o7:[0,3,6,9],
+  halfdim:[0,3,6,10],halfdiminished:[0,3,6,10],m7b5:[0,3,6,10],
+  add9:[0,4,7,2],addnine:[0,4,7,2],add2:[0,2,4,7],
+  '9':[0,4,7,10,2],dominant9:[0,4,7,10,2],m9:[0,3,7,10,2],minor9:[0,3,7,10,2],
+  maj9:[0,4,7,11,2],major9:[0,4,7,11,2],
+  '11':[0,4,7,10,2,5],'13':[0,4,7,10,2,5,9]
+};
+
+// ════════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════════
+const state = {
+  root: '', view: 'all', chord: 'Major', scale: 'Ionian',
+  instrument: 'guitar', labelMode: 'note', dark: true,
+  caged: new Set(), triadGrps: new Set()
+};
+
+function isBass() { return state.instrument === 'bass'; }
+function getStrNotes() { return INSTRUMENTS[state.instrument].notes; }
+function getStrFreqs() { return INSTRUMENTS[state.instrument].freqs; }
+function nStrings() { return getStrNotes().length; }
+function noteAt(s, f) { return NOTES[(NOTES.indexOf(getStrNotes()[s]) + f) % 12]; }
+
+// ════════════════════════════════════════════════════════════════
+// AUDIO
+// ════════════════════════════════════════════════════════════════
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx || audioCtx.state === 'closed')
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playNote(freq, si, fr) {
+  if (lickRec && si != null && fr != null)
+    lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr });
+  const ctx = getCtx(), sr = ctx.sampleRate;
+  const N = Math.max(2, Math.round(sr / freq));
+  const ns = Math.round(sr * 2.5);
+  const buf = new Float32Array(N);
+  for (let i = 0; i < N; i++) buf[i] = Math.random() * 2 - 1;
+  const ab = ctx.createBuffer(1, ns, sr);
+  const d = ab.getChannelData(0);
+  const decay = freq < 300 ? 0.998 : 0.996;
+  for (let i = 0; i < ns; i++) {
+    const j = i % N;
+    d[i] = buf[j];
+    buf[j] = decay * 0.5 * (buf[j] + buf[(i + 1) % N]);
+  }
+  for (let i = 0; i < ns; i++) d[i] = Math.tanh(d[i] * 1.5) * 0.65;
+  const src = ctx.createBufferSource();
+  src.buffer = ab; src.connect(ctx.destination); src.start();
+}
+
+function playStrum(notes, delay) {
+  notes.forEach((n, i) => setTimeout(() => playNote(n[0], n[1], n[2]), i * delay));
+}
+
+// ════════════════════════════════════════════════════════════════
+// SVG FRETBOARD RENDERING
+// ════════════════════════════════════════════════════════════════
+function renderFretboard() {
+  const container = document.getElementById('fretboard-container');
+  const rect = container.getBoundingClientRect();
+  const W = rect.width, H = rect.height;
+  if (W < 1 || H < 1) return;
+
+  const ns = nStrings();
+
+  // Size circles first so padding can account for them
+  const estFretW = W / (N_FRETS + 2);
+  const estStrH = H / (ns + 3);
+  const circleR = Math.min(estFretW, estStrH) * 0.26;
+
+  // Large padding to clear phone rounded corners, status bar, and nav gesture bar
+  const padL = Math.max(48, circleR + 14);
+  const padR = Math.max(48, circleR + 14);
+  const padT = Math.max(44, circleR + 22);
+  const padB = Math.max(40, circleR + 16);
+  const boardW = W - padL - padR;
+  const boardH = H - padT - padB;
+  const fretW = boardW / (N_FRETS - 1);
+  const strH = boardH / (ns - 1);
+
+  const fx = f => padL + f * fretW;
+  const sy = s => padT + s * strH;
+  const cyMid = padT + boardH / 2;
+
+  const dark = state.dark;
+  const strColor = dark ? '#daa520' : '#8B4513';
+  const fretColor = dark ? '#888' : '#aaa';
+  const markerColor = dark ? '#555' : '#bbb';
+  const textColor = dark ? '#aaa' : '#666';
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`;
+
+  // Strings
+  for (let i = 0; i < ns; i++) {
+    const y = sy(i);
+    const sw = 1.2 + (i / ns) * 1.5; // thicker for lower strings
+    svg += `<line x1="${fx(0)}" y1="${y}" x2="${fx(N_FRETS-1)}" y2="${y}" stroke="${strColor}" stroke-width="${sw}"/>`;
+  }
+
+  // Frets
+  for (let i = 0; i < N_FRETS; i++) {
+    const x = fx(i);
+    const w = i === 0 ? 3 : 1;
+    svg += `<line x1="${x}" y1="${sy(0)}" x2="${x}" y2="${sy(ns-1)}" stroke="${fretColor}" stroke-width="${w}"/>`;
+  }
+
+  // Fret markers
+  const mr = Math.min(fretW, strH) * 0.08;
+  for (const f of [3, 5, 7, 9, 15, 17, 19, 21]) {
+    if (f < N_FRETS) svg += `<circle cx="${fx(f)}" cy="${cyMid}" r="${mr}" fill="${markerColor}"/>`;
+  }
+  if (12 < N_FRETS) {
+    svg += `<circle cx="${fx(12)}" cy="${cyMid - strH * 0.35}" r="${mr}" fill="${markerColor}"/>`;
+    svg += `<circle cx="${fx(12)}" cy="${cyMid + strH * 0.35}" r="${mr}" fill="${markerColor}"/>`;
+  }
+
+  // String labels
+  const lblSize = Math.min(12, strH * 0.35);
+  const sNotes = getStrNotes();
+  for (let i = 0; i < ns; i++) {
+    svg += `<text x="${padL - 6}" y="${sy(i) + lblSize * 0.35}" text-anchor="end" font-family="Arial" font-size="${lblSize}" fill="${textColor}">${sNotes[i]}</text>`;
+  }
+
+  // Fret numbers (top, key frets only)
+  const fnSize = Math.max(10, Math.min(14, strH * 0.3));
+  const fnY = padT - 8;
+  const fnColor = dark ? '#ccc' : '#555';
+  for (const i of [3, 5, 7, 9, 12]) {
+    if (i < N_FRETS) svg += `<text x="${fx(i)}" y="${fnY}" text-anchor="middle" font-family="Arial" font-size="${fnSize}" font-weight="bold" fill="${fnColor}">${i}</text>`;
+  }
+
+  // Note circles
+  const fontSize = Math.max(7, circleR * 0.8);
+  const noteCircles = getNoteCircles();
+  for (const nc of noteCircles) {
+    const cx = fx(nc.fret), cy = sy(nc.string);
+    svg += `<circle cx="${cx}" cy="${cy}" r="${circleR}" fill="${nc.color}" stroke="${nc.color}" data-freq="${nc.freq}" data-s="${nc.string}" data-f="${nc.fret}" class="note-dot"/>`;
+    svg += `<text x="${cx}" y="${cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${nc.display}</text>`;
+  }
+
+  // CAGED boxes
+  const cagedParts = getCagedParts(fx, sy, circleR, fontSize);
+  svg += cagedParts;
+
+  // Triad boxes
+  const triadParts = getTriadParts(fx, sy, circleR, fontSize);
+  svg += triadParts;
+
+  // Info label (inside SVG, top-left within the padding zone)
+  const infoText = getInfoText();
+  svg += `<text x="${padL}" y="${14}" font-family="Arial" font-size="10" fill="${dark ? '#666' : '#aaa'}" pointer-events="none">${infoText}</text>`;
+
+  svg += '</svg>';
+  container.innerHTML = svg;
+
+  // Add touch/click handlers to note dots
+  container.querySelectorAll('.note-dot').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      playNote(parseFloat(el.dataset.freq), parseInt(el.dataset.s), parseInt(el.dataset.f));
+    });
+  });
+
+  // Add touch/click handlers to strum boxes
+  container.querySelectorAll('.strum-box').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      const notes = JSON.parse(el.dataset.notes);
+      playStrum(notes, 30);
+    });
+  });
+
+  updateInfoDisplay();
+}
+
+function getNoteCircles() {
+  const rootIdx = NOTES.indexOf(state.root);
+  const sFreqs = getStrFreqs();
+  const ns = nStrings();
+  const circles = [];
+
+  if (state.view === 'all') {
+    for (let s = 0; s < ns; s++)
+      for (let f = 0; f < N_FRETS; f++) {
+        const freq = sFreqs[s] * Math.pow(2, f / 12);
+        circles.push({ string: s, fret: f, color: '#555', display: noteAt(s, f), freq: Math.round(freq * 10000) / 10000 });
+      }
+    return circles;
+  }
+
+  if (state.view === 'root' && rootIdx >= 0) {
+    for (let s = 0; s < ns; s++)
+      for (let f = 0; f < N_FRETS; f++) {
+        if (NOTES.indexOf(noteAt(s, f)) === rootIdx) {
+          const freq = sFreqs[s] * Math.pow(2, f / 12);
+          circles.push({ string: s, fret: f, color: '#27ae60', display: state.labelMode === 'note' ? NOTES[rootIdx] : 'R', freq: Math.round(freq * 10000) / 10000 });
+        }
+      }
+    return circles;
+  }
+
+  // Check if we should only show triads
+  const hasTriads = state.triadGrps.size > 0;
+  const hideNotes = hasTriads && !state.caged.size;
+  if (hideNotes) return getTriadNoteCircles(sFreqs);
+
+  let degs;
+  if (state.view === 'scale') {
+    degs = {};
+    for (const i of SCALE_INTERVALS[state.scale])
+      degs[(rootIdx + i) % 12] = SCALE_DEGREES[state.scale][i];
+  } else if (state.view === 'chord') {
+    degs = {};
+    for (const i of CHORD_INTERVALS[state.chord])
+      degs[(rootIdx + i) % 12] = CHORD_DEGREES[state.chord][i];
+  } else return circles;
+
+  for (let s = 0; s < ns; s++)
+    for (let f = 0; f < N_FRETS; f++) {
+      const ni = NOTES.indexOf(noteAt(s, f));
+      if (ni in degs || degs[ni] !== undefined) {
+        const label = degs[ni];
+        const color = INTERVAL_COLORS[label] || '#e74c3c';
+        const display = state.labelMode === 'note' ? NOTES[ni] : label;
+        const freq = sFreqs[s] * Math.pow(2, f / 12);
+        circles.push({ string: s, fret: f, color, display, freq: Math.round(freq * 10000) / 10000 });
+      }
+    }
+  return circles;
+}
+
+// ── Triad logic ──
+function triadFromContext() {
+  const rootIdx = NOTES.indexOf(state.root);
+  if (state.view === 'chord') {
+    const degs = CHORD_DEGREES[state.chord];
+    return { degs, required: new Set(Object.values(degs)) };
+  }
+  const scale = state.scale;
+  const intervals = SCALE_INTERVALS[scale];
+  const sDegs = SCALE_DEGREES[scale];
+  let thirdInt = intervals.find(i => sDegs[i] === '3') ?? intervals.find(i => sDegs[i] === 'b3') ?? null;
+  let fifthInt = intervals.find(i => sDegs[i] === '5') ?? intervals.find(i => ['#5','b5'].includes(sDegs[i])) ?? null;
+  const thirdLbl = thirdInt !== null ? sDegs[thirdInt] : '3';
+  const fifthLbl = fifthInt !== null ? sDegs[fifthInt] : '5';
+  if (thirdInt === null) thirdInt = 4;
+  if (fifthInt === null) fifthInt = 7;
+  const degs = { 0: 'R', [thirdInt]: thirdLbl, [fifthInt]: fifthLbl };
+  return { degs, required: new Set(['R', thirdLbl, fifthLbl]) };
+}
+
+function findTriadVoicings(positions, required) {
+  const ns = nStrings();
+  const byString = {};
+  for (let i = 0; i < ns; i++) byString[i] = [];
+  for (const p of positions) byString[p.string].push(p);
+
+  const result = [];
+  for (let base = 0; base < ns - 2; base++) {
+    const s0 = byString[base], s1 = byString[base + 1], s2 = byString[base + 2];
+    const candidates = [];
+    for (const p0 of s0) for (const p1 of s1) for (const p2 of s2) {
+      const labels = new Set([p0.label, p1.label, p2.label]);
+      const frets = [p0.fret, p1.fret, p2.fret];
+      if (labels.size === required.size && [...required].every(r => labels.has(r)) && Math.max(...frets) - Math.min(...frets) <= 4) {
+        candidates.push({ minF: Math.min(...frets), maxF: Math.max(...frets), voicing: [p0, p1, p2] });
+      }
+    }
+    candidates.sort((a, b) => a.minF - b.minF);
+    let lastMax = -1;
+    for (const c of candidates) {
+      if (c.minF < N_FRETS && c.minF > lastMax) {
+        result.push({ group: base, voicing: c.voicing });
+        lastMax = c.maxF;
+      }
+    }
+  }
+  return result;
+}
+
+function getActiveVoicings() {
+  if (state.view === 'all' || state.view === 'root' || state.triadGrps.size === 0) return [];
+  const rootIdx = NOTES.indexOf(state.root);
+  const { degs: triadDegs, required } = triadFromContext();
+  const d = {};
+  for (const i in triadDegs) d[(rootIdx + parseInt(i)) % 12] = triadDegs[i];
+
+  const allPos = [];
+  for (let si = 0; si < nStrings(); si++)
+    for (let fr = 0; fr < N_FRETS; fr++) {
+      const ni = NOTES.indexOf(noteAt(si, fr));
+      if (d[ni] !== undefined) allPos.push({ string: si, fret: fr, label: d[ni] });
+    }
+  return findTriadVoicings(allPos, required).filter(v => state.triadGrps.has(v.group));
+}
+
+function getTriadNoteCircles(sFreqs) {
+  const circles = [];
+  for (const { voicing } of getActiveVoicings()) {
+    for (const p of voicing) {
+      const color = INTERVAL_COLORS[p.label] || '#e74c3c';
+      const display = state.labelMode === 'note' ? noteAt(p.string, p.fret) : p.label;
+      const freq = sFreqs[p.string] * Math.pow(2, p.fret / 12);
+      circles.push({ string: p.string, fret: p.fret, color, display, freq: Math.round(freq * 10000) / 10000 });
+    }
+  }
+  return circles;
+}
+
+function getTriadParts(fx, sy, circleR, fontSize) {
+  const voicings = getActiveVoicings();
+  if (!voicings.length) return '';
+  const sFreqs = getStrFreqs();
+  let svg = '';
+  for (const { group, voicing } of voicings) {
+    const xs = voicing.map(p => fx(p.fret));
+    const ys = voicing.map(p => sy(p.string));
+    const pad = circleR + 4;
+    const notes = voicing.slice().sort((a, b) => b.string - a.string)
+      .map(p => [Math.round(sFreqs[p.string] * Math.pow(2, p.fret / 12) * 10000) / 10000, p.string, p.fret]);
+    svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" stroke="${GROUP_COLORS[group]}" stroke-width="2" fill="transparent" class="strum-box" data-notes='${JSON.stringify(notes)}'/>`;
+  }
+  return svg;
+}
+
+// ── CAGED logic ──
+function getCagedParts(fx, sy, circleR, fontSize) {
+  if (isBass() || !state.caged.size) return '';
+  const rootIdx = NOTES.indexOf(state.root);
+  if (rootIdx < 0) return '';
+  const chordDegs = CHORD_DEGREES[state.chord] || CHORD_DEGREES.Major;
+  const sFreqs = INSTRUMENTS.guitar.freqs;
+  const sNotes = INSTRUMENTS.guitar.notes;
+  let svg = '';
+
+  for (const shapeName of state.caged) {
+    const shape = CAGED_SHAPES[shapeName];
+    if (!shape) continue;
+    const openNi = NOTES.indexOf(sNotes[shape.root_string]);
+    let baseFret = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
+    if (baseFret < 0) baseFret += 12;
+    if (baseFret >= N_FRETS) continue;
+
+    const circleParts = [];
+    const fretsDrawn = [], strsDrawn = [];
+    for (let si = 0; si < shape.pattern.length; si++) {
+      const offset = shape.pattern[si];
+      if (offset === -1) continue;
+      const expFret = baseFret + offset;
+      if (expFret >= N_FRETS) continue;
+      const openSn = NOTES.indexOf(sNotes[si]);
+      let bestFret = null, bestLabel = null, bestDist = 999;
+      for (const interval in chordDegs) {
+        const label = chordDegs[interval];
+        const target = (rootIdx + parseInt(interval)) % 12;
+        const basePos = (target - openSn + 120) % 12;
+        for (let oct = -1; oct < 3; oct++) {
+          const f = basePos + oct * 12;
+          if (f >= 0 && f < N_FRETS) {
+            const d = Math.abs(f - expFret);
+            if (d < bestDist) { bestDist = d; bestFret = f; bestLabel = label; }
+          }
+        }
+      }
+      if (bestFret === null || bestDist > 3) continue;
+      const ni = NOTES.indexOf(noteAt(si, bestFret));
+      const color = INTERVAL_COLORS[bestLabel] || '#888';
+      const display = state.labelMode === 'note' ? NOTES[ni] : bestLabel;
+      const freq = sFreqs[si] * Math.pow(2, bestFret / 12);
+      circleParts.push({ si, fret: bestFret, cx: fx(bestFret), cy: sy(si), color, display, freq: Math.round(freq * 10000) / 10000 });
+      fretsDrawn.push(bestFret);
+      strsDrawn.push(si);
+    }
+
+    if (fretsDrawn.length) {
+      const xs = circleParts.map(p => p.cx);
+      const ys = circleParts.map(p => p.cy);
+      const bc = BOX_COLORS[shapeName];
+      const pad = circleR + 4;
+      const notes = circleParts.slice().sort((a, b) => b.si - a.si)
+        .map(p => [p.freq, p.si, p.fret]);
+      svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" stroke="${bc}" stroke-width="2" fill="transparent" class="strum-box" data-notes='${JSON.stringify(notes)}'/>`;
+      svg += `<text x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad - 3}" font-family="Arial" font-size="${Math.max(8, circleR * 0.6)}" font-weight="bold" fill="${bc}">${shapeName}</text>`;
+      for (const p of circleParts) {
+        svg += `<circle cx="${p.cx}" cy="${p.cy}" r="${circleR}" fill="${p.color}" stroke="${p.color}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
+        svg += `<text x="${p.cx}" y="${p.cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${p.display}</text>`;
+      }
+    }
+  }
+  return svg;
+}
+
+// ════════════════════════════════════════════════════════════════
+// STRUM CURRENT VIEW
+// ════════════════════════════════════════════════════════════════
+function getStrumNotes() {
+  const ns = nStrings(), sFreqs = getStrFreqs();
+  if (state.view === 'all') {
+    return Array.from({ length: ns }, (_, i) => [Math.round(sFreqs[ns - 1 - i] * 10000) / 10000, ns - 1 - i, 0]);
+  }
+  if (state.view === 'root') {
+    const rootNi = NOTES.indexOf(state.root);
+    const notes = [];
+    for (let s = ns - 1; s >= 0; s--)
+      for (let f = 0; f < N_FRETS; f++)
+        if (NOTES.indexOf(noteAt(s, f)) === rootNi) { notes.push([Math.round(sFreqs[s] * Math.pow(2, f / 12) * 10000) / 10000, s, f]); break; }
+    return notes;
+  }
+  const rootIdx = NOTES.indexOf(state.root);
+  let activeNi;
+  if (state.view === 'scale') activeNi = new Set(SCALE_INTERVALS[state.scale].map(i => (rootIdx + i) % 12));
+  else activeNi = new Set(CHORD_INTERVALS[state.chord].map(i => (rootIdx + i) % 12));
+  const notes = [];
+  for (let s = ns - 1; s >= 0; s--)
+    for (let f = 0; f < N_FRETS; f++)
+      if (activeNi.has(NOTES.indexOf(noteAt(s, f)))) { notes.push([Math.round(sFreqs[s] * Math.pow(2, f / 12) * 10000) / 10000, s, f]); break; }
+  return notes;
+}
+
+function strumCurrent() { playStrum(getStrumNotes(), 30); }
+
+// ════════════════════════════════════════════════════════════════
+// METRONOME
+// ════════════════════════════════════════════════════════════════
+const metro = { running: false, bpm: 120, beats: 4, denom: 4, tick: 0, timeout: null };
+
+function metroTick() {
+  if (!metro.running) return;
+  const ctx = getCtx();
+  const isAccent = metro.tick % metro.beats === 0;
+  metro.tick++;
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.type = 'triangle'; osc.frequency.value = isAccent ? 1000 : 750;
+  osc.connect(gain); gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(isAccent ? 0.4 : 0.25, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+  osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.08);
+  metro.timeout = setTimeout(metroTick, 60000 / metro.bpm * (4 / metro.denom));
+}
+
+function toggleMetronome() {
+  const btn = document.getElementById('metro-btn');
+  if (metro.running) {
+    metro.running = false; clearTimeout(metro.timeout);
+    btn.textContent = '♩ Start'; btn.className = 'btn';
+  } else {
+    metro.running = true; metro.tick = 0;
+    metro.bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+    metro.beats = parseInt(document.getElementById('metro-top').value) || 4;
+    metro.denom = parseInt(document.getElementById('metro-bot').value) || 4;
+    metroTick();
+    btn.textContent = '■ Stop'; btn.className = 'btn btn-active';
+  }
+}
+
+function metroUpdate() {
+  if (metro.running) {
+    metro.bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+    metro.beats = parseInt(document.getElementById('metro-top').value) || 4;
+    metro.denom = parseInt(document.getElementById('metro-bot').value) || 4;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// CHORD PROGRESSION
+// ════════════════════════════════════════════════════════════════
+let progRunning = false, progTimeout = null;
+
+function parseChord(sym) {
+  sym = sym.trim(); if (!sym) return null;
+  let minFret = 0;
+  const fp = sym.match(/@(\d+)/);
+  if (fp) { minFret = parseInt(fp[1]); sym = sym.replace(/@\d+/, '').trim(); }
+  const m = sym.match(/^([A-G][b#]?)\s*(.*)/); if (!m) return null;
+  let rn = m[1]; const qual = m[2].trim();
+  const fm = { Cb:'B',Db:'C#',Eb:'D#',Fb:'E',Gb:'F#',Ab:'G#',Bb:'A#' };
+  if (fm[rn]) rn = fm[rn];
+  const ri = NOTES.indexOf(rn); if (ri === -1) return null;
+  const norm = qual.toLowerCase().replace(/\s+/g, '');
+  const iv = PROG_CHORD_IVALS[qual] || PROG_CHORD_IVALS[qual.toLowerCase()] || PROG_CHORD_IVALS[norm] || [0, 4, 7];
+  return { root: ri, ivals: iv, minFret };
+}
+
+function chordToNotes(chord) {
+  const sNotes = getStrNotes(), sFreqs = getStrFreqs(), ns = nStrings();
+  const noteSet = {};
+  chord.ivals.forEach(i => { noteSet[(chord.root + i) % 12] = true; });
+  const notes = [];
+  for (let si = ns - 1; si >= 0; si--) {
+    const on = NOTES.indexOf(sNotes[si]);
+    for (let fr = chord.minFret; fr < N_FRETS; fr++) {
+      if (noteSet[(on + fr) % 12]) {
+        notes.push([Math.round(sFreqs[si] * Math.pow(2, fr / 12) * 10000) / 10000, si, fr]);
+        break;
+      }
+    }
+  }
+  return notes;
+}
+
+function playProgression() {
+  const input = document.getElementById('chord-prog').value.trim();
+  const syms = input.includes(',')
+    ? input.split(',').map(s => s.trim()).filter(Boolean)
+    : input.split(/\s+/).filter(Boolean);
+  if (!syms.length) return;
+  const btn = document.getElementById('prog-btn');
+  if (progRunning) {
+    progRunning = false; clearTimeout(progTimeout);
+    btn.textContent = '▶ Play'; btn.className = 'btn';
+    return;
+  }
+  progRunning = true;
+  btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
+  const bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+  const bpc = parseInt(document.getElementById('prog-beats').value) || 4;
+  const mspc = Math.round(60000 / bpm * bpc);
+  let idx = 0;
+  (function next() {
+    if (!progRunning) return;
+    const c = parseChord(syms[idx]);
+    if (c) playStrum(chordToNotes(c), 30);
+    idx = (idx + 1) % syms.length;
+    progTimeout = setTimeout(next, mspc);
+  })();
+}
+
+// ════════════════════════════════════════════════════════════════
+// LICK RECORDER
+// ════════════════════════════════════════════════════════════════
+let lickRec = false, lickT0 = 0, lickNotes = [], savedLicks = {};
+
+function loadLicks() {
+  try { savedLicks = JSON.parse(localStorage.getItem('guitar_licks') || '{}'); } catch { savedLicks = {}; }
+  renderLickList();
+}
+function storeLicks() { localStorage.setItem('guitar_licks', JSON.stringify(savedLicks)); }
+
+function toggleRecording() {
+  const btn = document.getElementById('rec-btn');
+  const sa = document.getElementById('save-area');
+  if (lickRec) {
+    lickRec = false;
+    btn.textContent = '⏲ Start'; btn.className = 'btn';
+    if (lickNotes.length) sa.style.display = 'block';
+  } else {
+    lickRec = true; lickT0 = Date.now(); lickNotes = [];
+    btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
+    sa.style.display = 'none';
+  }
+}
+
+function saveLick() {
+  const name = document.getElementById('lick-name').value.trim();
+  if (!name) { alert('Enter a name'); return; }
+  savedLicks[name] = { ns: nStrings(), notes: lickNotes.slice() };
+  storeLicks(); renderLickList();
+  document.getElementById('lick-name').value = '';
+  document.getElementById('save-area').style.display = 'none';
+}
+
+function deleteLick(name) { delete savedLicks[name]; storeLicks(); renderLickList(); }
+
+function playLick(name) {
+  const lick = savedLicks[name]; if (!lick) return;
+  const notes = lick.notes || lick;
+  notes.forEach(n => {
+    setTimeout(() => playNote(n.f != null ? n.f : n.freq, n.s, n.fr), n.t);
+  });
+}
+
+function genTab(lick) {
+  const notes = lick.notes || lick;
+  if (!notes || !notes.length) return null;
+  const valid = notes.filter(n => n.s != null && n.fr != null);
+  if (!valid.length) return null;
+  const ns = lick.ns || (valid.some(n => n.s > 3) ? 6 : 4);
+  const labels = ns === 4 ? ['G','D','A','E'] : ['e','B','G','D','A','E'];
+  valid.sort((a, b) => a.t - b.t);
+  const cols = [];
+  valid.forEach(n => {
+    const last = cols.length ? cols[cols.length - 1] : null;
+    if (last && n.t - last[last.length - 1].t < 100) last.push(n);
+    else cols.push([n]);
+  });
+  const rows = labels.map(() => '');
+  cols.forEach(col => {
+    const byStr = {};
+    col.forEach(n => { byStr[n.s] = n.fr; });
+    let maxW = 1;
+    for (let i = 0; i < ns; i++) if (byStr[i] != null) maxW = Math.max(maxW, String(byStr[i]).length);
+    for (let i = 0; i < ns; i++) {
+      if (byStr[i] != null) { const s = String(byStr[i]); rows[i] += '-' + s + '-'.repeat(maxW - s.length); }
+      else rows[i] += '-'.repeat(maxW + 1);
+    }
+  });
+  return labels.map((l, i) => l + '|' + rows[i] + '-|').join('\n');
+}
+
+function renderLickList() {
+  const el = document.getElementById('lick-list'); if (!el) return;
+  const names = Object.keys(savedLicks);
+  if (!names.length) { el.innerHTML = ''; return; }
+  el.innerHTML = names.map((name, i) => {
+    const esc = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const tab = genTab(savedLicks[name]);
+    const tabHtml = tab ? `<pre id="lt${i}" style="display:none">${tab}</pre>` : '';
+    const tabBtn = tab ? `<button class="btn btn-sm" onclick="document.getElementById('lt${i}').style.display=document.getElementById('lt${i}').style.display==='none'?'block':'none'">tab</button>` : '';
+    return `<div class="lick-item">
+      <button class="btn btn-sm" onclick="playLick('${esc}')">▶ ${name}</button>
+      ${tabBtn}
+      <button class="btn btn-sm" style="color:#e05050" onclick="deleteLick('${esc}')">✕</button>
+    </div>${tabHtml}`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+// MENU & UI
+// ════════════════════════════════════════════════════════════════
+function openMenu() {
+  document.getElementById('menu-overlay').classList.add('open');
+  document.getElementById('menu-panel').classList.add('open');
+}
+function closeMenu() {
+  document.getElementById('menu-overlay').classList.remove('open');
+  document.getElementById('menu-panel').classList.remove('open');
+}
+
+function getInfoText() {
+  let text = '';
+  if (state.view === 'all') text = 'All Notes';
+  else if (state.view === 'root') text = state.root + ' Root';
+  else if (state.view === 'chord') text = state.root + ' ' + state.chord;
+  else if (state.view === 'scale') text = state.root + ' ' + state.scale;
+  if (state.caged.size) text += ' | CAGED: ' + [...state.caged].join('');
+  if (state.triadGrps.size) text += ' | Triads';
+  return text;
+}
+
+function updateInfoDisplay() {
+  // Info is now rendered inside the SVG, so just re-render
+}
+
+function populateRootSelect() {
+  const sel = document.getElementById('sel-root');
+  NOTES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+}
+
+function onTypeChange() {
+  const type = document.getElementById('sel-type').value;
+  const nameSel = document.getElementById('sel-name');
+  nameSel.innerHTML = '';
+  if (type === 'chord') {
+    Object.keys(CHORD_INTERVALS).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
+    nameSel.disabled = false;
+  } else if (type === 'scale') {
+    NAMED_SCALES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
+    nameSel.disabled = false;
+  } else if (type === 'mode') {
+    MODE_SCALES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
+    nameSel.disabled = false;
+  } else {
+    const o = document.createElement('option'); o.value = ''; o.textContent = '—'; nameSel.appendChild(o);
+    nameSel.disabled = true;
+  }
+  onSettingChange();
+}
+
+function onSettingChange() {
+  const root = document.getElementById('sel-root').value;
+  const type = document.getElementById('sel-type').value;
+  const name = document.getElementById('sel-name').value;
+  state.root = root;
+  state.labelMode = document.getElementById('sel-labels').value;
+
+  if (type === 'all') {
+    state.view = root ? 'root' : 'all';
+  } else if (type === 'chord') {
+    state.view = 'chord'; state.chord = name || 'Major';
+  } else if (type === 'scale' || type === 'mode') {
+    state.view = 'scale'; state.scale = name || 'Ionian';
+  }
+  renderFretboard();
+}
+
+function onInstrumentChange() {
+  state.instrument = document.getElementById('sel-instrument').value;
+  state.caged.clear();
+  state.triadGrps.clear();
+  buildChips();
+  renderFretboard();
+}
+
+function onThemeChange() {
+  state.dark = document.getElementById('sel-theme').value === 'dark';
+  document.body.className = state.dark ? 'dark' : 'light';
+  renderFretboard();
+}
+
+function clearAll() {
+  state.view = 'all'; state.root = ''; state.caged.clear(); state.triadGrps.clear();
+  document.getElementById('sel-root').value = '';
+  document.getElementById('sel-type').value = 'all';
+  onTypeChange();
+  buildChips();
+  renderFretboard();
+}
+
+function buildChips() {
+  // CAGED
+  const cagedContainer = document.getElementById('caged-chips');
+  const cagedSection = document.getElementById('caged-section');
+  cagedContainer.innerHTML = '';
+  if (isBass()) {
+    cagedSection.style.display = 'none';
+  } else {
+    cagedSection.style.display = '';
+    for (const name of ['C', 'A', 'G', 'E', 'D']) {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (state.caged.has(name) ? ' active' : '');
+      chip.textContent = name;
+      chip.style.borderColor = BOX_COLORS[name];
+      if (state.caged.has(name)) chip.style.background = BOX_COLORS[name];
+      chip.addEventListener('click', () => {
+        if (state.caged.has(name)) state.caged.delete(name);
+        else state.caged.add(name);
+        buildChips();
+        renderFretboard();
+      });
+      cagedContainer.appendChild(chip);
+    }
+  }
+
+  // Triads
+  const triadContainer = document.getElementById('triad-chips');
+  triadContainer.innerHTML = '';
+  const triadMap = isBass()
+    ? { 0: 'G-D-A', 1: 'D-A-E' }
+    : { 0: 'e-B-G', 1: 'B-G-D', 2: 'G-D-A', 3: 'D-A-E' };
+  for (const [idx, label] of Object.entries(triadMap)) {
+    const g = parseInt(idx);
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (state.triadGrps.has(g) ? ' active' : '');
+    chip.textContent = label;
+    chip.style.borderColor = GROUP_COLORS[g];
+    if (state.triadGrps.has(g)) chip.style.background = GROUP_COLORS[g];
+    chip.addEventListener('click', () => {
+      if (state.triadGrps.has(g)) state.triadGrps.delete(g);
+      else state.triadGrps.add(g);
+      buildChips();
+      renderFretboard();
+    });
+    triadContainer.appendChild(chip);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════════
+function init() {
+  populateRootSelect();
+  onTypeChange();
+  buildChips();
+  loadLicks();
+
+  // Menu toggle
+  document.getElementById('menu-toggle').addEventListener('click', openMenu);
+  document.getElementById('menu-overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('menu-overlay')) closeMenu();
+  });
+
+  // Close menu on swipe right
+  let touchStartX = 0;
+  document.getElementById('menu-panel').addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+  document.getElementById('menu-panel').addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (dx > 60) closeMenu();
+  }, { passive: true });
+
+  // Responsive resize
+  let resizeTimer;
+  const ro = new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderFretboard, 50);
+  });
+  ro.observe(document.getElementById('fretboard-container'));
+
+  renderFretboard();
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

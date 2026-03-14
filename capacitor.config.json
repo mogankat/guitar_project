@@ -1,0 +1,17 @@
+{
+  "appId": "com.guitarfretboard.app",
+  "appName": "Guitar Fretboard",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#1e1e1e"
+    },
+    "ScreenOrientation": {
+      "orientation": "landscape"
+    }
+  }
+}
