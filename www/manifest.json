@@ -1,0 +1,19 @@
+{
+  "name": "Guitar Fretboard",
+  "short_name": "Fretboard",
+  "description": "Interactive guitar and bass fretboard visualizer with scales, chords, CAGED system, metronome, and more",
+  "start_url": "/index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1e1e1e",
+  "theme_color": "#1e1e1e",
+  "categories": ["music", "education"],
+  "icons": [
+    {
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

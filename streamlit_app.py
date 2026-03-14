@@ -430,7 +430,8 @@ def build_svg():
     svg_h  = get_svg_h()
     cy_mid = sy(0) + (cur_ns - 1) * STRING_H // 2   
 
-    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{SVG_W}" height="{svg_h}" '
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="{svg_h}" '
+         f'viewBox="0 0 {SVG_W} {svg_h}" preserveAspectRatio="none" '
          f'style="background:{bg};display:block">']
 
     for i in range(cur_ns):
@@ -753,7 +754,6 @@ def build_fretboard_html():
     lbl_fg = '#cccccc' if dark else '#333333'
     bdr_col = '#555'   if dark else '#ccc'
 
-    svg_h = get_svg_h()
     rbs = (f'padding:5px 12px;font-size:12px;cursor:pointer;background:{btn_bg};color:{btn_fg};'
            f'border:1px solid #888;border-radius:4px')
     sbs = (f'padding:4px 10px;font-size:12px;cursor:pointer;background:{btn_bg};color:{btn_fg};'
@@ -766,65 +766,72 @@ def build_fretboard_html():
     sn_js = '[' + ','.join(f'"{n}"' for n in get_string_notes()) + ']'
     sf_js = '[' + ','.join(f'{f:.4f}' for f in get_string_freqs()) + ']'
 
-    lick_panel = (
-        f'<script>var _btnBg="{btn_bg}",_btnFg="{btn_fg}",_lblFg="{lbl_fg}",'
-        f'_nStrings={get_n_strings()},_N_FRETS={N_FRETS},_STRING_NOTES={sn_js},_STRING_FREQS={sf_js};</script>'
-        f'<div id="right-panel" style="width:200px;border-left:1px solid {bdr_col};'
-        f'padding:10px 12px;font-family:Arial;color:{lbl_fg};'
-        f'height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden">'
+    sec = f'padding:10px 12px;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden'
+    bdr = f'border-left:1px solid {bdr_col}'
 
-        # Metronome
+    metro_section = (
+        f'<div style="{sec};min-width:155px">'
         f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Metronome</div>'
         f'<button id="metro-btn" onclick="toggleMetronome()" style="{rbs}">&#9833; Start</button>'
-        f'<div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:11px">'
+        f'<div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;flex-wrap:wrap">'
         f'<span>BPM</span>'
         f'<input id="metro-bpm" type="number" value="120" min="40" max="240"'
         f' oninput="_metroUpdate()" style="{nis}width:44px">'
-        f'<span style="margin-left:4px">Time</span>'
+        f'<span>Time</span>'
         f'<input id="metro-top" type="number" value="4" min="1" max="12"'
         f' oninput="_metroUpdate()" style="{nis}width:28px">'
         f'<span>/</span>'
         f'<input id="metro-bot" type="number" value="4" min="1" max="32"'
         f' oninput="_metroUpdate()" style="{nis}width:28px">'
         f'</div>'
+        f'</div>'
+    )
 
-        # Divider
-        f'<hr style="border:none;border-top:1px solid {bdr_col};margin:10px 0 8px">'
-
-        # Chord progression
+    prog_section = (
+        f'<div style="{sec};{bdr};min-width:210px">'
         f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Chord Progression</div>'
-        f'<input id="chord-prog" placeholder="Am F C G - Am  (- = rest)" style="{ins}"'
+        f'<input id="chord-prog" placeholder="Am F C G  (- = rest)" style="{ins}"'
         f' onkeydown="if(event.key===\'Enter\')playProgression()">'
         f'<div style="display:flex;align-items:center;gap:5px;margin-top:6px">'
         f'<button id="prog-btn" onclick="playProgression()" style="{sbs}">&#9654; Play</button>'
         f'<span style="font-size:11px">beats</span>'
         f'<input id="prog-beats" type="number" value="4" min="1" max="32" style="{nis}width:34px" title="Beats/chord">'
         f'</div>'
+        f'</div>'
+    )
 
-        # Divider + Record
-        f'<hr style="border:none;border-top:1px solid {bdr_col};margin:10px 0 8px">'
+    rec_section = (
+        f'<div style="{sec};{bdr};flex-grow:1;min-width:150px">'
         f'<div style="font-size:12px;font-weight:bold;margin-bottom:5px">Recorder</div>'
-        f'<button id="rec-btn" onclick="toggleRecording()" style="{rbs}">&#9210; Start</button>'
-        f'<div id="save-area" style="display:none;flex-direction:column;gap:5px;margin-top:6px;margin-bottom:8px">'
+        f'<button id="rec-btn" onclick="toggleRecording()" style="{rbs};width:fit-content">&#9210; Start</button>'
+        f'<div id="save-area" style="display:none;flex-direction:column;gap:5px;margin-top:6px;margin-bottom:4px">'
         f'<input id="lick-name" placeholder="Name" style="{ins}"'
         f' onkeydown="if(event.key===\'Enter\')saveLick()"/>'
         f'<button onclick="saveLick()" style="{sbs}">Save</button>'
         f'</div>'
-
-        # Lick list (grows to fill)
         f'<div id="lick-list" style="flex-grow:1;overflow-y:auto;min-height:0;margin-top:6px"></div>'
         f'</div>'
     )
 
+    bottom_panel = (
+        f'<div style="display:flex;height:200px;border-top:1px solid {bdr_col};'
+        f'background:{bg};font-family:Arial;color:{lbl_fg};overflow:hidden">'
+        + metro_section + prog_section + rec_section +
+        f'</div>'
+    )
+
+    js_init = (
+        f'<script>var _btnBg="{btn_bg}",_btnFg="{btn_fg}",_lblFg="{lbl_fg}",'
+        f'_nStrings={get_n_strings()},_N_FRETS={N_FRETS},_STRING_NOTES={sn_js},_STRING_FREQS={sf_js};</script>'
+    )
+
     return (
         f'<!DOCTYPE html><html><head>'
-        f'<style>body{{margin:0;background:{bg};overflow-x:auto;overflow-y:hidden}}'
-        f'table{{border-collapse:collapse}}td{{padding:0;vertical-align:top}}</style>'
+        f'<style>body{{margin:0;background:{bg};overflow:hidden}}</style>'
         f'</head><body>'
-        f'<table style="height:{svg_h}px"><tr style="height:{svg_h}px">'
-        f'<td>{build_svg()}</td>'
-        f'<td style="width:200px">{lick_panel}</td>'
-        f'</tr></table>'
+        + js_init +
+        f'<div style="overflow:hidden">{build_svg()}</div>'
+        + bottom_panel +
         f'{_KS_JS}</body></html>'
     )
 
@@ -875,7 +882,7 @@ def main():
     triad_val = c_tri.multiselect("Triads", list(triad_map.values()), key="sel_triads")
 
     theme_val     = c_theme.selectbox("Theme", ["Light", "Dark"], key="sel_theme")
-    c_clr.write("")
+    c_clr.markdown('<div style="height:29px"></div>', unsafe_allow_html=True)
     clear_clicked = c_clr.button("Clear", use_container_width=True)
 
     # ── Apply widget values to session state ──────────────────────────────────
@@ -918,7 +925,7 @@ def main():
         st.rerun()
 
     # ── Fretboard ──────────────────────────────────────────────────────────────
-    st.components.v1.html(build_fretboard_html(), height=get_svg_h() + 20, scrolling=False)
+    st.components.v1.html(build_fretboard_html(), height=get_svg_h() + 220, scrolling=False)
 
 
 main()
