@@ -70,10 +70,11 @@ html, body {
 .menu-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .menu-label { font-size: 12px; min-width: 50px; color: #aaa; }
 
-select, input[type="number"], input[type="text"] {
+select, input[type="number"], input[type="text"], textarea {
   background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--border);
   border-radius: 4px; padding: 6px 8px; font-size: 13px; -webkit-appearance: none;
 }
+textarea { font-size: 11px; font-family: monospace; resize: vertical; line-height: 1.45; width: 100%; display: block; }
 select { padding-right: 24px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%23999' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; }
 input[type="number"] { width: 52px; }
 input[type="text"] { width: 100%; }
@@ -203,9 +204,51 @@ body.light {
         <input id="chord-prog" type="text" placeholder="Am F C G" onkeydown="if(event.key==='Enter')playProgression()">
       </div>
       <div class="menu-row">
-        <button class="btn" id="prog-btn" onclick="playProgression()">▶ Play</button>
-        <span class="menu-label">Beats</span>
+        <span class="menu-label">BPM</span>
+        <input id="prog-bpm" type="number" value="120" min="40" max="240" style="width:52px">
+        <span class="menu-label" style="margin-left:8px">Beats</span>
         <input id="prog-beats" type="number" value="4" min="1" max="32" style="width:44px">
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Pattern</span>
+        <input id="prog-pattern" type="text" placeholder="D D U D U" style="flex:1;min-width:0">
+      </div>
+      <div class="menu-row">
+        <button class="btn" id="prog-btn" onclick="playProgression()">▶ Play</button>
+      </div>
+      <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+        <div>Pattern: D=down  U=up  X=mute  -=rest</div>
+        <div>Modifiers: Am<span style="font-family:monospace">(arp)</span> <span style="font-family:monospace">(arpd)</span> <span style="font-family:monospace">(pinch)</span> <span style="font-family:monospace">(slide)</span> <span style="font-family:monospace">(vib)</span></div>
+        <div>Tab: h=hammer-on  p=pull-off  /\=slide  ~=vibrato</div>
+      </div>
+    </div>
+
+    <!-- Tab Writer -->
+    <div class="menu-section">
+      <h3>Tab Writer</h3>
+      <textarea id="tab-input" rows="7" placeholder="Linear (one note per token):&#10;B:1/6 G:5h7 D:5h7&#10;&#10;ASCII (paste standard tab):&#10;e|--0----5h7--|&#10;B|--1/6--------|&#10;G|--5h7--------|"></textarea>
+      <div class="menu-row" style="margin-top:8px">
+        <span class="menu-label">BPM</span>
+        <input id="tab-bpm" type="number" value="120" min="40" max="240" style="width:52px">
+        <span class="menu-label" style="margin-left:6px">Step</span>
+        <select id="tab-subdiv">
+          <option value="4">1/4</option>
+          <option value="8" selected>1/8</option>
+          <option value="16">1/16</option>
+        </select>
+      </div>
+      <div class="menu-row">
+        <button class="btn" id="tab-play-btn" onclick="playTabWriter()">▶ Play</button>
+      </div>
+      <div class="menu-row">
+        <input id="tab-lick-name" type="text" placeholder="Lick name to save" style="flex:1;min-width:0">
+        <button class="btn" onclick="saveTabToLooper()">→ Looper</button>
+      </div>
+      <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+        <div>Strings: <span style="font-family:monospace">e B G D A E</span> &nbsp;(e=high, E=low)</div>
+        <div>Format: <span style="font-family:monospace">STRING:FRET[TECH[FRET2]]</span></div>
+        <div>Techs: <span style="font-family:monospace">h</span>=hammer &nbsp;<span style="font-family:monospace">p</span>=pull-off &nbsp;<span style="font-family:monospace">/</span>=slide up &nbsp;<span style="font-family:monospace">\</span>=slide dn &nbsp;<span style="font-family:monospace">~</span>=vib &nbsp;<span style="font-family:monospace">b</span>=bend</div>
+        <div>In progression: <span style="font-family:monospace">tab:lickName</span></div>
       </div>
     </div>
 
@@ -309,6 +352,7 @@ const CAGED_SHAPES = {
 
 const MODE_SCALES = ['Ionian','Dorian','Phrygian','Lydian','Mixolydian','Aeolian','Locrian'];
 const NAMED_SCALES = ['Maj Pent','Min Pent','Maj Blues','Min Blues','Nat Minor','Harm Minor','Mel Minor'];
+const CHORD_NAMES = ['Major','Minor','Sus2','Sus4','7','Dim','Aug','Add9'];
 
 const N_FRETS = 15;
 
@@ -788,11 +832,27 @@ function metroUpdate() {
 // ════════════════════════════════════════════════════════════════
 let progRunning = false, progTimeout = null;
 
+function parseStrumPattern(str) {
+  if (!str) return null;
+  const pat = str.toUpperCase().replace(/[\s,]+/g, '').split('').filter(c => 'DUX-'.includes(c));
+  return pat.length ? pat : null;
+}
+
 function parseChord(sym) {
   sym = sym.trim(); if (!sym) return null;
-  let minFret = 0;
+  let minFret = 0, mods = {};
   const fp = sym.match(/@(\d+)/);
   if (fp) { minFret = parseInt(fp[1]); sym = sym.replace(/@\d+/, '').trim(); }
+  const modM = sym.match(/\(([^)]+)\)$/);
+  if (modM) {
+    sym = sym.slice(0, -modM[0].length).trim();
+    const mod = modM[1].toLowerCase();
+    if (mod === 'arp' || mod === 'arpu') mods.arp = 'up';
+    else if (mod === 'arpd') mods.arp = 'down';
+    else if (mod === 'pinch') mods.pinch = true;
+    else if (mod === 'slide' || mod === '/') mods.slide = true;
+    else if (mod === 'vib' || mod === '~') mods.vib = true;
+  }
   const m = sym.match(/^([A-G][b#]?)\s*(.*)/); if (!m) return null;
   let rn = m[1]; const qual = m[2].trim();
   const fm = { Cb:'B',Db:'C#',Eb:'D#',Fb:'E',Gb:'F#',Ab:'G#',Bb:'A#' };
@@ -800,7 +860,7 @@ function parseChord(sym) {
   const ri = NOTES.indexOf(rn); if (ri === -1) return null;
   const norm = qual.toLowerCase().replace(/\s+/g, '');
   const iv = PROG_CHORD_IVALS[qual] || PROG_CHORD_IVALS[qual.toLowerCase()] || PROG_CHORD_IVALS[norm] || [0, 4, 7];
-  return { root: ri, ivals: iv, minFret };
+  return { root: ri, ivals: iv, minFret, mods };
 }
 
 function chordToNotes(chord) {
@@ -820,8 +880,56 @@ function chordToNotes(chord) {
   return notes;
 }
 
+// notes are ordered low-string-first (downstroke order)
+function playStrumStroke(notes, dir, delay) {
+  const ordered = dir === 'U' ? [...notes].reverse() : notes;
+  if (dir === 'X') {
+    ordered.forEach((n, i) => setTimeout(() => playNote(n[0] * 0.7, n[1], n[2]), i * delay));
+    return;
+  }
+  playStrum(ordered, delay);
+}
+
+function playArpeggio(notes, dir, mspc) {
+  const ordered = dir === 'down' ? [...notes].reverse() : [...notes];
+  const spacing = Math.min(200, Math.floor(mspc / (ordered.length + 1)));
+  ordered.forEach((n, i) => setTimeout(() => playNote(n[0], n[1], n[2]), i * spacing));
+}
+
+function playPinch(notes) {
+  if (!notes.length) return;
+  playNote(notes[0][0], notes[0][1], notes[0][2]);
+  if (notes.length > 1) playNote(notes[notes.length - 1][0], notes[notes.length - 1][1], notes[notes.length - 1][2]);
+}
+
+function playSlideChord(notes, dir, delay) {
+  const grace = notes.map(([f, s, fr]) => [f * Math.pow(2, -2/12), s, fr]);
+  playStrumStroke(dir === 'U' ? [...grace].reverse() : grace, dir, delay * 0.5);
+  setTimeout(() => playStrumStroke(notes, dir, delay), 55);
+}
+
+function playVibChord(notes, dir, delay) {
+  playStrumStroke(notes, dir, delay);
+  [0.011, -0.011, 0.009, -0.009, 0.006, -0.006].forEach((d, i) => {
+    setTimeout(() => {
+      const det = notes.map(([f, s, fr]) => [f * (1 + d), s, fr]);
+      playStrum(det, delay * 0.4);
+    }, 190 + i * 95);
+  });
+}
+
+function playChordWithStyle(notes, mods, dir, delay, mspc) {
+  if (!notes.length) return;
+  if (mods.arp)   { playArpeggio(notes, mods.arp, mspc); return; }
+  if (mods.pinch) { playPinch(notes); return; }
+  if (mods.slide) { playSlideChord(notes, dir, delay); return; }
+  if (mods.vib)   { playVibChord(notes, dir, delay); return; }
+  playStrumStroke(notes, dir, delay);
+}
+
 function playProgression() {
   const input = document.getElementById('chord-prog').value.trim();
+  const patternStr = document.getElementById('prog-pattern').value.trim();
   const syms = input.includes(',')
     ? input.split(',').map(s => s.trim()).filter(Boolean)
     : input.split(/\s+/).filter(Boolean);
@@ -834,17 +942,226 @@ function playProgression() {
   }
   progRunning = true;
   btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
-  const bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+  const bpm = parseInt(document.getElementById('prog-bpm').value) || 120;
   const bpc = parseInt(document.getElementById('prog-beats').value) || 4;
   const mspc = Math.round(60000 / bpm * bpc);
+  const pattern = parseStrumPattern(patternStr);
   let idx = 0;
   (function next() {
     if (!progRunning) return;
-    const c = parseChord(syms[idx]);
-    if (c) playStrum(chordToNotes(c), 30);
+    const sym = syms[idx];
+    if (/^tab:/i.test(sym)) {
+      const lickName = sym.slice(4);
+      const lick = savedLicks[lickName];
+      if (lick) {
+        const lnotes = lick.notes || lick;
+        lnotes.forEach(n => setTimeout(() => {
+          if (!progRunning) return;
+          playNote(n.f != null ? n.f : n.freq, n.s, n.fr);
+        }, n.t));
+      }
+    } else {
+      const c = parseChord(sym);
+      if (c) {
+        const notes = chordToNotes(c);
+        const mods = c.mods || {};
+        if (pattern) {
+          const strokeMs = mspc / pattern.length;
+          pattern.forEach((stroke, pi) => {
+            setTimeout(() => {
+              if (!progRunning) return;
+              if (stroke !== '-') playChordWithStyle(notes, mods, stroke, 20, mspc);
+            }, pi * strokeMs);
+          });
+        } else {
+          playChordWithStyle(notes, mods, 'D', 30, mspc);
+        }
+      }
+    }
     idx = (idx + 1) % syms.length;
     progTimeout = setTimeout(next, mspc);
   })();
+}
+
+// ════════════════════════════════════════════════════════════════
+// TAB WRITER
+// ════════════════════════════════════════════════════════════════
+let tabRunning = false, tabTimeouts = [];
+
+function tabSI(label) {
+  return { e: 0, B: 1, G: 2, D: 3, A: 4, E: 5 }[label] ?? -1;
+}
+
+function tabFreq(si, fr) {
+  return getStrFreqs()[si] * Math.pow(2, fr / 12);
+}
+
+function parseTabToken(tok) {
+  const m = tok.match(/^([eBGDAE]):(\d+)([hp\/\\~b]?)(\d*)$/);
+  if (!m) return null;
+  const si = tabSI(m[1]);
+  if (si < 0 || si >= nStrings()) return null;
+  const fr = parseInt(m[2]);
+  const freq = tabFreq(si, fr);
+  const tech = m[3] || null;
+  const targetFr = m[4] ? parseInt(m[4]) : null;
+  const targetFreq = targetFr !== null ? tabFreq(si, targetFr) : null;
+  return { si, fr, freq, tech: tech || null, targetFr, targetFreq };
+}
+
+function parseLinearTab(text) {
+  const tokens = text.trim().split(/\s+/).filter(t => t && t !== '|');
+  const events = [];
+  let pos = 0;
+  for (const tok of tokens) {
+    const note = parseTabToken(tok);
+    if (note) { events.push({ pos, notes: [note] }); pos++; }
+  }
+  return events;
+}
+
+function parseAsciiTab(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const strData = {};
+
+  for (const line of lines) {
+    const m = line.match(/^([eEBGDA])\s*\|(.+?)(?:\|.*)?$/);
+    if (!m) continue;
+    const si = tabSI(m[1]);
+    if (si < 0 || si >= nStrings() || strData[si] !== undefined) continue;
+    strData[si] = m[2];
+  }
+
+  if (!Object.keys(strData).length) return [];
+
+  const raw = [];
+  for (const [siStr, content] of Object.entries(strData)) {
+    const si = parseInt(siStr);
+    let i = 0;
+    while (i < content.length) {
+      if (!/\d/.test(content[i])) { i++; continue; }
+      const pos = i;
+      let frStr = '';
+      while (i < content.length && /\d/.test(content[i])) frStr += content[i++];
+      const fr = parseInt(frStr);
+      const freq = tabFreq(si, fr);
+      let tech = null, targetFr = null, targetFreq = null;
+      if (i < content.length && 'hp/\\~b'.includes(content[i])) {
+        tech = content[i++];
+        let tfStr = '';
+        while (i < content.length && /\d/.test(content[i])) tfStr += content[i++];
+        if (tfStr) { targetFr = parseInt(tfStr); targetFreq = tabFreq(si, targetFr); }
+      }
+      raw.push({ pos, si, fr, freq, tech: tech || null, targetFr, targetFreq });
+    }
+  }
+
+  raw.sort((a, b) => a.pos - b.pos);
+  const events = [];
+  for (const ev of raw) {
+    const last = events.length ? events[events.length - 1] : null;
+    if (last && Math.abs(last.pos - ev.pos) <= 1) last.notes.push(ev);
+    else events.push({ pos: ev.pos, notes: [ev] });
+  }
+  return events;
+}
+
+function parseTab(text) {
+  const isAscii = text.split('\n').some(l => /^[eEBGDA]\s*\|/.test(l.trim()));
+  return isAscii ? parseAsciiTab(text) : parseLinearTab(text);
+}
+
+function playTechNote(note, delayMs) {
+  const { si, fr, freq, tech, targetFr, targetFreq } = note;
+  switch (tech) {
+    case 'h':
+      setTimeout(() => playNote(freq, si, fr), delayMs);
+      setTimeout(() => playNote(targetFreq, si, targetFr), delayMs + 65);
+      break;
+    case 'p':
+      setTimeout(() => playNote(freq, si, fr), delayMs);
+      setTimeout(() => playNote(targetFreq * 0.75, si, targetFr), delayMs + 70);
+      break;
+    case '/':
+    case 'b':
+      setTimeout(() => playNote(freq * Math.pow(2, -2/12), si, fr), delayMs);
+      setTimeout(() => playNote(freq, si, fr), delayMs + 35);
+      if (targetFreq) setTimeout(() => playNote(targetFreq, si, targetFr), delayMs + 70);
+      break;
+    case '\\':
+      setTimeout(() => playNote(freq * Math.pow(2, 2/12), si, fr), delayMs);
+      setTimeout(() => playNote(freq, si, fr), delayMs + 35);
+      if (targetFreq) setTimeout(() => playNote(targetFreq, si, targetFr), delayMs + 70);
+      break;
+    case '~':
+      setTimeout(() => {
+        playNote(freq, si, fr);
+        [0.012, -0.012, 0.009, -0.009, 0.006, -0.006].forEach((d, i) =>
+          setTimeout(() => playNote(freq * (1 + d), si, fr), 185 + i * 90));
+      }, delayMs);
+      break;
+    default:
+      setTimeout(() => playNote(freq, si, fr), delayMs);
+  }
+}
+
+function tabStepMs() {
+  const bpm = parseInt(document.getElementById('tab-bpm').value) || 120;
+  const subdiv = parseInt(document.getElementById('tab-subdiv').value) || 8;
+  return Math.round(60000 / bpm * 4 / subdiv);
+}
+
+function eventsToLickNotes(events, stepMs) {
+  const out = [];
+  for (const ev of events) {
+    const t = ev.pos * stepMs;
+    for (const n of ev.notes) {
+      out.push({ f: n.freq, t, s: n.si, fr: n.fr });
+      if (n.tech && n.targetFreq != null) {
+        const offset = (n.tech === 'h' || n.tech === 'p') ? 65 : 70;
+        out.push({ f: n.targetFreq, t: t + offset, s: n.si, fr: n.targetFr });
+      }
+    }
+  }
+  return out;
+}
+
+function playTabWriter() {
+  const btn = document.getElementById('tab-play-btn');
+  if (tabRunning) {
+    tabRunning = false;
+    tabTimeouts.forEach(clearTimeout); tabTimeouts = [];
+    btn.textContent = '▶ Play'; btn.className = 'btn';
+    return;
+  }
+  const text = document.getElementById('tab-input').value.trim();
+  if (!text) return;
+  const events = parseTab(text);
+  if (!events.length) return;
+  const stepMs = tabStepMs();
+  tabRunning = true;
+  btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
+  for (const ev of events) {
+    const base = ev.pos * stepMs;
+    for (const note of ev.notes) playTechNote(note, base);
+  }
+  const totalMs = (Math.max(...events.map(e => e.pos)) + 1) * stepMs + 600;
+  tabTimeouts.push(setTimeout(() => {
+    tabRunning = false;
+    btn.textContent = '▶ Play'; btn.className = 'btn';
+  }, totalMs));
+}
+
+function saveTabToLooper() {
+  const text = document.getElementById('tab-input').value.trim();
+  const name = document.getElementById('tab-lick-name').value.trim();
+  if (!text || !name) { alert('Enter tab content and a lick name'); return; }
+  const events = parseTab(text);
+  if (!events.length) { alert('No notes found — check your tab format'); return; }
+  const stepMs = tabStepMs();
+  savedLicks[name] = { ns: nStrings(), notes: eventsToLickNotes(events, stepMs) };
+  storeLicks(); renderLickList();
+  document.getElementById('tab-lick-name').value = '';
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -961,15 +1278,44 @@ function genTab(lick) {
     if (last && n.t - last[last.length - 1].t < 100) last.push(n);
     else cols.push([n]);
   });
+
+  // Detect techniques between adjacent columns on the same string
+  const techMap = {};
+  for (let ci = 1; ci < cols.length; ci++) {
+    const prev = cols[ci - 1];
+    for (const cn of cols[ci]) {
+      const pn = prev.find(p => p.s === cn.s);
+      if (!pn) continue;
+      const dt = cn.t - pn.t;
+      let tech;
+      if (pn.fr === cn.fr)      tech = '~';
+      else if (dt < 80)         tech = pn.fr < cn.fr ? '/' : '\\';
+      else if (pn.fr < cn.fr)   tech = 'h';
+      else                      tech = 'p';
+      if (!techMap[ci]) techMap[ci] = {};
+      techMap[ci][cn.s] = tech;
+    }
+  }
+
   const rows = labels.map(() => '');
-  cols.forEach(col => {
+  cols.forEach((col, ci) => {
     const byStr = {};
     col.forEach(n => { byStr[n.s] = n.fr; });
     let maxW = 1;
-    for (let i = 0; i < ns; i++) if (byStr[i] != null) maxW = Math.max(maxW, String(byStr[i]).length);
     for (let i = 0; i < ns; i++) {
-      if (byStr[i] != null) { const s = String(byStr[i]); rows[i] += '-' + s + '-'.repeat(maxW - s.length); }
-      else rows[i] += '-'.repeat(maxW + 1);
+      if (byStr[i] != null) {
+        const pfx = (techMap[ci] && techMap[ci][i]) || '';
+        maxW = Math.max(maxW, pfx.length + String(byStr[i]).length);
+      }
+    }
+    for (let i = 0; i < ns; i++) {
+      if (byStr[i] != null) {
+        const pfx = (techMap[ci] && techMap[ci][i]) || '';
+        const s = pfx + String(byStr[i]);
+        rows[i] += '-' + s + '-'.repeat(maxW - s.length);
+      } else {
+        rows[i] += '-'.repeat(maxW + 1);
+      }
     }
   });
   return labels.map((l, i) => l + '|' + rows[i] + '-|').join('\n');
@@ -1033,7 +1379,7 @@ function onTypeChange() {
   const nameSel = document.getElementById('sel-name');
   nameSel.innerHTML = '';
   if (type === 'chord') {
-    Object.keys(CHORD_INTERVALS).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
+    CHORD_NAMES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
     nameSel.disabled = false;
   } else if (type === 'scale') {
     NAMED_SCALES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
