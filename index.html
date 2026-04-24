@@ -155,10 +155,7 @@ body.light {
       </div>
       <div class="menu-row">
         <span class="menu-label">Labels</span>
-        <select id="sel-labels" onchange="onSettingChange()">
-          <option value="note">Note Names</option>
-          <option value="interval">Intervals</option>
-        </select>
+        <button class="btn" id="sel-labels" onclick="toggleLabels()">Note Names</button>
       </div>
       <div class="menu-row">
         <span class="menu-label">Instrument</span>
@@ -212,15 +209,15 @@ body.light {
       </div>
     </div>
 
-    <!-- Recorder -->
+    <!-- Looper -->
     <div class="menu-section">
-      <h3>Recorder</h3>
+      <h3>Looper</h3>
       <div class="menu-row">
-        <button class="btn" id="rec-btn" onclick="toggleRecording()">⏲ Start</button>
+        <button class="btn" id="rec-btn" onclick="toggleRecording()">⏺ Start Recording</button>
       </div>
       <div id="save-area" style="display:none">
         <div class="menu-row">
-          <input id="lick-name" type="text" placeholder="Lick name" onkeydown="if(event.key==='Enter')saveLick()">
+          <input id="lick-name" type="text" placeholder="Loop name" onkeydown="if(event.key==='Enter')saveLick()">
         </div>
         <div class="menu-row">
           <button class="btn" onclick="saveLick()">Save</button>
@@ -266,8 +263,8 @@ const SCALE_INTERVALS = {
   'Maj Blues':[0,2,3,4,7,9], 'Min Blues':[0,3,5,6,7,10]
 };
 const CHORD_INTERVALS = {
-  Major:[0,4,7], Minor:[0,3,7], Sus4:[0,5,7], Sus2:[0,2,7],
-  Aug:[0,4,8], Dim:[0,3,6], Add9:[0,4,7,2], '7':[0,4,7,10]
+  Major:[0,4,7], Minor:[0,3,7], Sus2:[0,2,7], Sus4:[0,5,7],
+  '7':[0,4,7,10], Dim:[0,3,6], Aug:[0,4,8], Add9:[0,4,7,2]
 };
 
 const SCALE_DEGREES = {
@@ -311,7 +308,8 @@ const CAGED_SHAPES = {
 };
 
 const MODE_SCALES = ['Ionian','Dorian','Phrygian','Lydian','Mixolydian','Aeolian','Locrian'];
-const NAMED_SCALES = ['Nat Minor','Harm Minor','Mel Minor','Maj Pent','Min Pent','Maj Blues','Min Blues'];
+const NAMED_SCALES = ['Maj Pent','Min Pent','Maj Blues','Min Blues','Nat Minor','Harm Minor','Mel Minor'];
+const CHORD_NAMES = ['Major','Minor','Sus2','Sus4','7','Dim','Aug','Add9'];
 
 const N_FRETS = 15;
 
@@ -450,14 +448,6 @@ function renderFretboard() {
   const sNotes = getStrNotes();
   for (let i = 0; i < ns; i++) {
     svg += `<text x="${padL - 6}" y="${sy(i) + lblSize * 0.35}" text-anchor="end" font-family="Arial" font-size="${lblSize}" fill="${textColor}">${sNotes[i]}</text>`;
-  }
-
-  // Fret numbers (top, key frets only)
-  const fnSize = Math.max(10, Math.min(14, strH * 0.3));
-  const fnY = padT - 8;
-  const fnColor = dark ? '#ccc' : '#555';
-  for (const i of [3, 5, 7, 9, 12]) {
-    if (i < N_FRETS) svg += `<text x="${fx(i)}" y="${fnY}" text-anchor="middle" font-family="Arial" font-size="${fnSize}" font-weight="bold" fill="${fnColor}">${i}</text>`;
   }
 
   // Note circles
@@ -874,13 +864,39 @@ function toggleRecording() {
   const sa = document.getElementById('save-area');
   if (lickRec) {
     lickRec = false;
-    btn.textContent = '⏲ Start'; btn.className = 'btn';
-    if (lickNotes.length) sa.style.display = 'block';
+    btn.textContent = '⏺ Start Recording'; btn.className = 'btn';
+    if (lickNotes.length) {
+      sa.style.display = 'block';
+      // Auto-suggest name based on notes played
+      const nameInput = document.getElementById('lick-name');
+      nameInput.value = suggestLickName();
+      nameInput.select();
+    }
   } else {
     lickRec = true; lickT0 = Date.now(); lickNotes = [];
-    btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
+    btn.textContent = '⏹ Stop Recording'; btn.className = 'btn btn-danger';
     sa.style.display = 'none';
   }
+}
+
+function suggestLickName() {
+  if (!lickNotes.length) return '';
+  // Get unique note names in order of first appearance
+  const seen = new Set();
+  const noteNames = [];
+  const sNotes = getStrNotes();
+  for (const n of lickNotes) {
+    if (n.s != null && n.fr != null) {
+      const name = NOTES[(NOTES.indexOf(sNotes[n.s]) + n.fr) % 12];
+      if (!seen.has(name)) { seen.add(name); noteNames.push(name); }
+    }
+  }
+  // If current view is chord/scale, prefix with that
+  let prefix = '';
+  if (state.view === 'chord') prefix = state.root + ' ' + state.chord + ' - ';
+  else if (state.view === 'scale') prefix = state.root + ' ' + state.scale + ' - ';
+  // Use first few unique notes
+  return prefix + noteNames.slice(0, 5).join(' ');
 }
 
 function saveLick() {
@@ -894,12 +910,42 @@ function saveLick() {
 
 function deleteLick(name) { delete savedLicks[name]; storeLicks(); renderLickList(); }
 
-function playLick(name) {
+let loopingLick = null, loopTimeouts = [];
+function playLick(name, loop) {
+  // If already looping this lick, stop it
+  if (loopingLick === name) { stopLoop(); renderLickList(); return; }
+  // Stop any existing loop
+  stopLoop();
+
   const lick = savedLicks[name]; if (!lick) return;
   const notes = lick.notes || lick;
-  notes.forEach(n => {
-    setTimeout(() => playNote(n.f != null ? n.f : n.freq, n.s, n.fr), n.t);
-  });
+  if (!notes.length) return;
+  const duration = Math.max(...notes.map(n => n.t)) + 500; // total duration + gap
+
+  function playOnce() {
+    notes.forEach(n => {
+      loopTimeouts.push(setTimeout(() => playNote(n.f != null ? n.f : n.freq, n.s, n.fr), n.t));
+    });
+  }
+
+  playOnce();
+  if (loop) {
+    loopingLick = name;
+    (function scheduleNext() {
+      loopTimeouts.push(setTimeout(() => {
+        if (loopingLick !== name) return;
+        playOnce();
+        scheduleNext();
+      }, duration));
+    })();
+    renderLickList();
+  }
+}
+
+function stopLoop() {
+  loopingLick = null;
+  loopTimeouts.forEach(t => clearTimeout(t));
+  loopTimeouts = [];
 }
 
 function genTab(lick) {
@@ -939,9 +985,13 @@ function renderLickList() {
     const tab = genTab(savedLicks[name]);
     const tabHtml = tab ? `<pre id="lt${i}" style="display:none">${tab}</pre>` : '';
     const tabBtn = tab ? `<button class="btn btn-sm" onclick="document.getElementById('lt${i}').style.display=document.getElementById('lt${i}').style.display==='none'?'block':'none'">tab</button>` : '';
+    const isLooping = loopingLick === name;
+    const loopBtn = `<button class="btn btn-sm${isLooping ? ' btn-active' : ''}" onclick="playLick('${esc}',true)" title="Loop">${isLooping ? '⏹' : '🔁'}</button>`;
     return `<div class="lick-item">
-      <button class="btn btn-sm" onclick="playLick('${esc}')">▶ ${name}</button>
+      <button class="btn btn-sm" onclick="playLick('${esc}',false)">▶</button>
+      ${loopBtn}
       ${tabBtn}
+      <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
       <button class="btn btn-sm" style="color:#e05050" onclick="deleteLick('${esc}')">✕</button>
     </div>${tabHtml}`;
   }).join('');
@@ -984,7 +1034,7 @@ function onTypeChange() {
   const nameSel = document.getElementById('sel-name');
   nameSel.innerHTML = '';
   if (type === 'chord') {
-    Object.keys(CHORD_INTERVALS).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
+    CHORD_NAMES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
     nameSel.disabled = false;
   } else if (type === 'scale') {
     NAMED_SCALES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
@@ -1004,7 +1054,7 @@ function onSettingChange() {
   const type = document.getElementById('sel-type').value;
   const name = document.getElementById('sel-name').value;
   state.root = root;
-  state.labelMode = document.getElementById('sel-labels').value;
+  // labelMode is set by toggle button, not a select
 
   if (type === 'all') {
     state.view = root ? 'root' : 'all';
@@ -1021,6 +1071,12 @@ function onInstrumentChange() {
   state.caged.clear();
   state.triadGrps.clear();
   buildChips();
+  renderFretboard();
+}
+
+function toggleLabels() {
+  state.labelMode = state.labelMode === 'note' ? 'interval' : 'note';
+  document.getElementById('sel-labels').textContent = state.labelMode === 'note' ? 'Note Names' : 'Intervals';
   renderFretboard();
 }
 
