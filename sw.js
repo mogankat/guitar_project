@@ -1,4 +1,4 @@
-const CACHE_NAME = 'guitar-fretboard-v1';
+const CACHE_NAME = 'guitar-fretboard-v2';
 const ASSETS = [
   '/',
   '/index.html',
