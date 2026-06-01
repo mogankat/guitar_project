@@ -102,6 +102,17 @@ input[type="text"] { width: 100%; }
 /* ── Interactive fretboard elements ── */
 .note-dot, .strum-box { cursor: pointer; }
 
+/* ── Played-note ripple highlight ── */
+@keyframes notePulse {
+  from { transform: scale(0.55); opacity: 0.95; }
+  to   { transform: scale(1.95); opacity: 0; }
+}
+.play-ring {
+  transform-box: fill-box; transform-origin: center;
+  animation: notePulse 0.45s ease-out forwards;
+  pointer-events: none;
+}
+
 /* ── Chip toggles (CAGED, Triads) ── */
 .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -432,8 +443,10 @@ function getCtx() {
 }
 
 function playNote(freq, si, fr) {
-  if (lickRec && si != null && fr != null)
-    lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr });
+  if (si != null && fr != null) {
+    if (lickRec) lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr });
+    highlightPlayedNote(si, fr);
+  }
   const ctx = getCtx(), sr = ctx.sampleRate;
   const N = Math.max(2, Math.round(sr / freq));
   const ns = Math.round(sr * 2.5);
@@ -456,9 +469,32 @@ function playStrum(notes, delay) {
   notes.forEach((n, i) => setTimeout(() => playNote(n[0], n[1], n[2]), i * delay));
 }
 
+// Flash a ripple ring on the fretboard at the string/fret being played.
+// Works in any view (it positions itself from the last render's geometry),
+// so notes played by the looper and chord/tab player light up even when no
+// static dot is shown there.
+function highlightPlayedNote(si, fr) {
+  if (!fbGeom) return;
+  if (si < 0 || si >= nStrings() || fr < 0 || fr >= N_FRETS) return;
+  const svg = document.querySelector('#fretboard-container svg');
+  if (!svg) return;
+  const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  ring.setAttribute('cx', fbGeom.fx(fr));
+  ring.setAttribute('cy', fbGeom.sy(si));
+  ring.setAttribute('r', fbGeom.circleR);
+  ring.setAttribute('fill', 'none');
+  ring.setAttribute('stroke', state.dark ? '#ffffff' : '#111111');
+  ring.setAttribute('stroke-width', '2.5');
+  ring.setAttribute('class', 'play-ring');
+  svg.appendChild(ring);
+  ring.addEventListener('animationend', () => ring.remove());
+  setTimeout(() => { if (ring.parentNode) ring.remove(); }, 700);
+}
+
 // ════════════════════════════════════════════════════════════════
 // SVG FRETBOARD RENDERING
 // ════════════════════════════════════════════════════════════════
+let fbGeom = null; // last render's geometry, for positioning played-note highlights
 function renderFretboard() {
   const container = document.getElementById('fretboard-container');
   const rect = container.getBoundingClientRect();
@@ -485,6 +521,7 @@ function renderFretboard() {
   const fx = f => padL + f * fretW;
   const sy = s => padT + s * strH;
   const cyMid = padT + boardH / 2;
+  fbGeom = { fx, sy, circleR };
 
   const dark = state.dark;
   const strColor = dark ? '#daa520' : '#8B4513';
@@ -1192,9 +1229,32 @@ function saveTabToLooper() {
   const events = parseTab(text);
   if (!events.length) { alert('No notes found — check your tab format'); return; }
   const stepMs = tabStepMs();
-  savedLicks[name] = { ns: nStrings(), notes: eventsToLickNotes(events, stepMs) };
+  savedLicks[name] = {
+    ns: nStrings(),
+    notes: eventsToLickNotes(events, stepMs),
+    src: text,                                                         // keep the exact tab text
+    subdiv: parseInt(document.getElementById('tab-subdiv').value) || 8,
+    bpm: parseInt(document.getElementById('player-bpm').value) || 120
+  };
   storeLicks(); renderLickList();
   document.getElementById('tab-lick-name').value = '';
+}
+
+// Load a saved loop back into the Player's Tab editor for editing.
+// Tab-authored loops reload their original text; recorded loops fall back
+// to a generated tab so they can still be cleaned up and re-saved.
+function editLick(name) {
+  const lick = savedLicks[name]; if (!lick) return;
+  const text = lick.src || genTab(lick);
+  if (!text) { alert('This loop has no editable tab.'); return; }
+  setPlayerMode('tab');
+  document.getElementById('tab-input').value = text;
+  document.getElementById('tab-lick-name').value = name;
+  if (lick.subdiv) document.getElementById('tab-subdiv').value = String(lick.subdiv);
+  if (lick.bpm) document.getElementById('player-bpm').value = lick.bpm;
+  const ta = document.getElementById('tab-input');
+  ta.scrollIntoView({ block: 'center' });
+  ta.focus();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1360,15 +1420,19 @@ function renderLickList() {
   if (!names.length) { el.innerHTML = ''; return; }
   el.innerHTML = names.map((name, i) => {
     const esc = name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    const tab = genTab(savedLicks[name]);
-    const tabHtml = tab ? `<pre id="lt${i}" style="display:none">${tab}</pre>` : '';
-    const tabBtn = tab ? `<button class="btn btn-sm" onclick="document.getElementById('lt${i}').style.display=document.getElementById('lt${i}').style.display==='none'?'block':'none'">tab</button>` : '';
+    const lick = savedLicks[name];
+    const rawTab = lick.src || genTab(lick);                          // prefer the original text
+    const tabEsc = rawTab ? rawTab.replace(/&/g, '&amp;').replace(/</g, '&lt;') : '';
+    const tabHtml = rawTab ? `<pre id="lt${i}" style="display:none">${tabEsc}</pre>` : '';
+    const tabBtn = rawTab ? `<button class="btn btn-sm" onclick="document.getElementById('lt${i}').style.display=document.getElementById('lt${i}').style.display==='none'?'block':'none'">tab</button>` : '';
+    const editBtn = `<button class="btn btn-sm" title="Edit" onclick="editLick('${esc}')">✎</button>`;
     const isLooping = loopingLick === name;
     const loopBtn = `<button class="btn btn-sm${isLooping ? ' btn-active' : ''}" onclick="playLick('${esc}',true)" title="Loop">${isLooping ? '⏹' : '🔁'}</button>`;
     return `<div class="lick-item">
       <button class="btn btn-sm" onclick="playLick('${esc}',false)">▶</button>
       ${loopBtn}
       ${tabBtn}
+      ${editBtn}
       <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
       <button class="btn btn-sm" style="color:#e05050" onclick="deleteLick('${esc}')">✕</button>
     </div>${tabHtml}`;
