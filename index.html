@@ -178,7 +178,6 @@ body.light {
           <option value="all">All Notes</option>
           <option value="chord">Chord</option>
           <option value="scale">Scale</option>
-          <option value="mode">Mode</option>
         </select>
       </div>
       <div class="menu-row">
@@ -247,6 +246,7 @@ body.light {
       <h3>Looper</h3>
       <div class="menu-row">
         <button class="btn" id="rec-btn" onclick="toggleRecording()">⏺ Start Recording</button>
+        <button class="btn" onclick="stopLooper()">■ Stop playback</button>
       </div>
       <div id="save-area" style="display:none">
         <div class="menu-row">
@@ -267,6 +267,19 @@ body.light {
         <button class="btn btn-sm player-mode" data-mode="tab" onclick="setPlayerMode('tab')">Tab</button>
         <span class="menu-label" style="margin-left:auto">BPM</span>
         <input id="player-bpm" type="number" value="120" min="40" max="240" style="width:52px">
+      </div>
+
+      <!-- Import / paste -->
+      <div class="menu-row" style="margin-top:6px">
+        <button class="btn btn-sm" onclick="toggleImport()">⬇ Import / paste</button>
+      </div>
+      <div id="import-area" style="display:none;margin-bottom:6px">
+        <textarea id="import-input" rows="5" placeholder="Paste an ASCII tab, or a chord sheet (chord names above the lyrics)…"></textarea>
+        <div class="menu-row" style="margin-top:6px">
+          <button class="btn btn-sm" onclick="smartImport(document.getElementById('import-input').value)">Load</button>
+          <button class="btn btn-sm" onclick="closeImport()">Cancel</button>
+          <span class="menu-label" style="margin-left:auto;font-size:10px">tab → Tab · chords → Chords</span>
+        </div>
       </div>
 
       <!-- Chords mode -->
@@ -318,10 +331,7 @@ body.light {
     <div class="menu-footer">
       <div class="menu-row" style="margin-bottom:0">
         <span class="menu-label">Theme</span>
-        <select id="sel-theme" onchange="onThemeChange()">
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-        </select>
+        <button class="btn" id="sel-theme" onclick="toggleTheme()">Dark</button>
         <button class="btn btn-sm" style="margin-left:auto" onclick="clearAll()">Clear All</button>
       </div>
     </div>
@@ -393,8 +403,17 @@ const CAGED_SHAPES = {
   D:{pattern:[2,3,2,0,-1,-1],root_string:3,root_fret_in_pattern:0}
 };
 
-const MODE_SCALES = ['Ionian','Dorian','Phrygian','Lydian','Mixolydian','Aeolian','Locrian'];
-const NAMED_SCALES = ['Maj Pent','Min Pent','Maj Blues','Min Blues','Nat Minor','Harm Minor','Mel Minor'];
+// Combined scale/mode picker: modes first (Ionian shown as Major, Aeolian as
+// Nat Minor), then the named scales. The standalone "Nat Minor" scale is omitted
+// because it is identical to Aeolian. [internal key, shown label]
+const SCALE_OPTIONS = [
+  ['Ionian', 'Ionian (Major)'], ['Dorian', 'Dorian'], ['Phrygian', 'Phrygian'],
+  ['Lydian', 'Lydian'], ['Mixolydian', 'Mixolydian'], ['Aeolian', 'Aeolian (Minor)'],
+  ['Locrian', 'Locrian'],
+  ['Maj Pent', 'Maj Pent'], ['Min Pent', 'Min Pent'],
+  ['Maj Blues', 'Maj Blues'], ['Min Blues', 'Min Blues'],
+  ['Harm Minor', 'Harm Minor'], ['Mel Minor', 'Mel Minor']
+];
 const CHORD_NAMES = ['Major','Minor','Sus2','Sus4','7','Dim','Aug','Add9'];
 
 const N_FRETS = 15;
@@ -614,10 +633,13 @@ function getNoteCircles() {
     return circles;
   }
 
-  // Check if we should only show triads
+  // When a shape selector (Triads or CAGED) is active, hide the full pattern
+  // and show only the selected shapes. Triad notes are returned here; CAGED
+  // shape notes are drawn separately by getCagedParts().
   const hasTriads = state.triadGrps.size > 0;
-  const hideNotes = hasTriads && !state.caged.size;
-  if (hideNotes) return getTriadNoteCircles(sFreqs);
+  const hasCaged = !isBass() && state.caged.size > 0 && rootIdx >= 0;
+  if (hasCaged) return [];                              // CAGED notes are drawn by getCagedParts()
+  if (hasTriads) return getTriadNoteCircles(sFreqs);
 
   let degs;
   if (state.view === 'scale') {
@@ -723,6 +745,11 @@ function getTriadNoteCircles(sFreqs) {
 }
 
 function getTriadParts(fx, sy, circleR, fontSize) {
+  if (state.triadGrps.size === 0) return '';
+  // When a CAGED shape is active, triads are constrained to inside the cage.
+  if (!isBass() && state.caged.size > 0 && NOTES.indexOf(state.root) >= 0)
+    return getCagedTriadBoxes(fx, sy, circleR);
+
   const voicings = getActiveVoicings();
   if (!voicings.length) return '';
   const sFreqs = getStrFreqs();
@@ -738,15 +765,39 @@ function getTriadParts(fx, sy, circleR, fontSize) {
   return svg;
 }
 
+// Triads constrained to a CAGED shape: for each selected group (3 adjacent
+// strings) draw one box around the cage's notes that fall on those strings.
+function getCagedTriadBoxes(fx, sy, circleR) {
+  const shapes = computeCagedShapes();
+  if (!shapes.length) return '';
+  let svg = '';
+  for (const { notes } of shapes) {
+    for (const g of state.triadGrps) {
+      const sel = notes.filter(p => p.si >= g && p.si <= g + 2);
+      // Require the complete triad: all three of the group's strings must exist
+      // in this cage shape, otherwise don't box a partial (2-note) triad.
+      if (sel.length < 3) continue;
+      const xs = sel.map(p => fx(p.fret));
+      const ys = sel.map(p => sy(p.si));
+      const pad = circleR + 1.5; // nest just inside the cage box (circleR + 4)
+      const dnotes = sel.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+      svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" stroke="${GROUP_COLORS[g]}" stroke-width="2" fill="transparent" class="strum-box" data-notes='${JSON.stringify(dnotes)}'/>`;
+    }
+  }
+  return svg;
+}
+
 // ── CAGED logic ──
-function getCagedParts(fx, sy, circleR, fontSize) {
-  if (isBass() || !state.caged.size) return '';
+// Compute the notes of each selected CAGED shape (best chord-tone near each
+// pattern position). Returns [{ shapeName, notes: [{si, fret, color, display, freq}] }].
+function computeCagedShapes() {
+  if (isBass() || !state.caged.size) return [];
   const rootIdx = NOTES.indexOf(state.root);
-  if (rootIdx < 0) return '';
+  if (rootIdx < 0) return [];
   const chordDegs = CHORD_DEGREES[state.chord] || CHORD_DEGREES.Major;
   const sFreqs = INSTRUMENTS.guitar.freqs;
   const sNotes = INSTRUMENTS.guitar.notes;
-  let svg = '';
+  const out = [];
 
   for (const shapeName of state.caged) {
     const shape = CAGED_SHAPES[shapeName];
@@ -756,8 +807,7 @@ function getCagedParts(fx, sy, circleR, fontSize) {
     if (baseFret < 0) baseFret += 12;
     if (baseFret >= N_FRETS) continue;
 
-    const circleParts = [];
-    const fretsDrawn = [], strsDrawn = [];
+    const notes = [];
     for (let si = 0; si < shape.pattern.length; si++) {
       const offset = shape.pattern[si];
       if (offset === -1) continue;
@@ -781,25 +831,32 @@ function getCagedParts(fx, sy, circleR, fontSize) {
       const ni = NOTES.indexOf(noteAt(si, bestFret));
       const color = INTERVAL_COLORS[bestLabel] || '#888';
       const display = state.labelMode === 'note' ? NOTES[ni] : bestLabel;
-      const freq = sFreqs[si] * Math.pow(2, bestFret / 12);
-      circleParts.push({ si, fret: bestFret, cx: fx(bestFret), cy: sy(si), color, display, freq: Math.round(freq * 10000) / 10000 });
-      fretsDrawn.push(bestFret);
-      strsDrawn.push(si);
+      const freq = Math.round(sFreqs[si] * Math.pow(2, bestFret / 12) * 10000) / 10000;
+      notes.push({ si, fret: bestFret, color, display, freq });
     }
+    if (notes.length) out.push({ shapeName, notes });
+  }
+  return out;
+}
 
-    if (fretsDrawn.length) {
-      const xs = circleParts.map(p => p.cx);
-      const ys = circleParts.map(p => p.cy);
-      const bc = BOX_COLORS[shapeName];
-      const pad = circleR + 4;
-      const notes = circleParts.slice().sort((a, b) => b.si - a.si)
-        .map(p => [p.freq, p.si, p.fret]);
-      svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" stroke="${bc}" stroke-width="2" fill="transparent" class="strum-box" data-notes='${JSON.stringify(notes)}'/>`;
-      svg += `<text x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad - 3}" font-family="Arial" font-size="${Math.max(8, circleR * 0.6)}" font-weight="bold" fill="${bc}">${shapeName}</text>`;
-      for (const p of circleParts) {
-        svg += `<circle cx="${p.cx}" cy="${p.cy}" r="${circleR}" fill="${p.color}" stroke="${p.color}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
-        svg += `<text x="${p.cx}" y="${p.cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${p.display}</text>`;
-      }
+function getCagedParts(fx, sy, circleR, fontSize) {
+  const shapes = computeCagedShapes();
+  if (!shapes.length) return '';
+  let svg = '';
+
+  for (const { shapeName, notes } of shapes) {
+    const parts = notes.map(p => ({ ...p, cx: fx(p.fret), cy: sy(p.si) }));
+    const xs = parts.map(p => p.cx);
+    const ys = parts.map(p => p.cy);
+    const bc = BOX_COLORS[shapeName];
+    const pad = circleR + 4;
+    // Box 1: the full CAGED shape (always drawn). Triad boxes nest inside it.
+    const dnotes = parts.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+    svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" stroke="${bc}" stroke-width="2" fill="transparent" class="strum-box" data-notes='${JSON.stringify(dnotes)}'/>`;
+    svg += `<text x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad - 3}" font-family="Arial" font-size="${Math.max(8, circleR * 0.6)}" font-weight="bold" fill="${bc}">${shapeName}</text>`;
+    for (const p of parts) {
+      svg += `<circle cx="${p.cx}" cy="${p.cy}" r="${circleR}" fill="${p.color}" stroke="${p.color}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
+      svg += `<text x="${p.cx}" y="${p.cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${p.display}</text>`;
     }
   }
   return svg;
@@ -1357,6 +1414,32 @@ function stopLoop() {
   loopTimeouts = [];
 }
 
+// Stop any looper playback and refresh the highlight state.
+function stopLooper() {
+  stopLoop();
+  renderLickList();
+}
+
+// Copy a saved loop's tab to the clipboard, with a brief ✓ confirmation.
+function copyLickTab(name, btn) {
+  const lick = savedLicks[name]; if (!lick) return;
+  const text = lick.src || genTab(lick);
+  if (!text) { alert('No tab to copy for this loop.'); return; }
+  const flash = () => { if (!btn) return; const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = o; }, 900); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(flash).catch(() => { fallbackCopy(text); flash(); });
+  } else { fallbackCopy(text); flash(); }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
 function genTab(lick) {
   const notes = lick.notes || lick;
   if (!notes || !notes.length) return null;
@@ -1372,22 +1455,19 @@ function genTab(lick) {
     else cols.push([n]);
   });
 
-  // Detect techniques between adjacent columns on the same string
+  // Infer legato techniques only for genuine single-note transitions:
+  // both columns must be one note, on the same string, with a fret change.
+  // Chords (multi-note columns) and repeated notes get plain fret numbers,
+  // so strummed/recorded chords don't pick up bogus ~ / h / p markings.
   const techMap = {};
   for (let ci = 1; ci < cols.length; ci++) {
-    const prev = cols[ci - 1];
-    for (const cn of cols[ci]) {
-      const pn = prev.find(p => p.s === cn.s);
-      if (!pn) continue;
-      const dt = cn.t - pn.t;
-      let tech;
-      if (pn.fr === cn.fr)      tech = '~';
-      else if (dt < 80)         tech = pn.fr < cn.fr ? '/' : '\\';
-      else if (pn.fr < cn.fr)   tech = 'h';
-      else                      tech = 'p';
-      if (!techMap[ci]) techMap[ci] = {};
-      techMap[ci][cn.s] = tech;
-    }
+    const prev = cols[ci - 1], cur = cols[ci];
+    if (prev.length !== 1 || cur.length !== 1) continue;
+    const pn = prev[0], cn = cur[0];
+    if (pn.s !== cn.s || pn.fr === cn.fr) continue;
+    const dt = cn.t - pn.t;
+    const tech = dt < 80 ? (pn.fr < cn.fr ? '/' : '\\') : (pn.fr < cn.fr ? 'h' : 'p');
+    techMap[ci] = { [cn.s]: tech };
   }
 
   const rows = labels.map(() => '');
@@ -1426,12 +1506,13 @@ function renderLickList() {
     const tabHtml = rawTab ? `<pre id="lt${i}" style="display:none">${tabEsc}</pre>` : '';
     const tabBtn = rawTab ? `<button class="btn btn-sm" onclick="document.getElementById('lt${i}').style.display=document.getElementById('lt${i}').style.display==='none'?'block':'none'">tab</button>` : '';
     const editBtn = `<button class="btn btn-sm" title="Edit" onclick="editLick('${esc}')">✎</button>`;
+    const copyBtn = rawTab ? `<button class="btn btn-sm" title="Copy tab" onclick="copyLickTab('${esc}', this)">copy</button>` : '';
     const isLooping = loopingLick === name;
-    const loopBtn = `<button class="btn btn-sm${isLooping ? ' btn-active' : ''}" onclick="playLick('${esc}',true)" title="Loop">${isLooping ? '⏹' : '🔁'}</button>`;
+    const playBtn = `<button class="btn btn-sm${isLooping ? ' btn-active' : ''}" onclick="playLick('${esc}',true)" title="Play (loop)">▶</button>`;
     return `<div class="lick-item">
-      <button class="btn btn-sm" onclick="playLick('${esc}',false)">▶</button>
-      ${loopBtn}
+      ${playBtn}
       ${tabBtn}
+      ${copyBtn}
       ${editBtn}
       <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
       <button class="btn btn-sm" style="color:#e05050" onclick="deleteLick('${esc}')">✕</button>
@@ -1479,6 +1560,66 @@ function playerPlay() {
   else playProgression();
 }
 
+// ── Smart paste import ──
+function toggleImport() {
+  const a = document.getElementById('import-area');
+  const open = a.style.display === 'none';
+  a.style.display = open ? 'block' : 'none';
+  if (open) document.getElementById('import-input').focus();
+}
+function closeImport() {
+  document.getElementById('import-area').style.display = 'none';
+  document.getElementById('import-input').value = '';
+}
+
+// True if a token is a plausible chord symbol: root (+accidental), an optional
+// known quality, and an optional /bass — strict enough to reject lyric words.
+function isChordToken(t) {
+  const m = t.match(/^([A-G][#b]?)([^\s\/]*)(?:\/[A-G][#b]?)?$/);
+  if (!m) return false;
+  return /^(maj7|maj9|maj|min7|min|m7b5|m7|m9|m6|m|dim7|dim|aug|sus2|sus4|sus|add9|add2|add11|add|6|69|7sus4|7|9|11|13|2|4|5|\+|°|ø)*$/i.test(m[2]);
+}
+
+// Pull chord symbols, in order, from chord-over-lyrics sheets (e.g. UG chord
+// pages). Only lines made entirely of chords (plus bars/dashes/repeat counts)
+// are treated as chord lines, so lyrics and [Section] headers are ignored.
+function importChordSheet(text) {
+  const out = [];
+  for (let line of text.split('\n')) {
+    line = line.replace(/\t/g, ' ').trim();
+    if (!line || /^\[.*\]$/.test(line)) continue;
+    const chords = [], leftover = [];
+    for (const tk of line.split(/\s+/)) {
+      if (!tk) continue;
+      if (isChordToken(tk)) chords.push(tk);
+      else if (/^\(?\d*x?\d*\)?$/i.test(tk) || tk === '|' || /^[-–—:.]+$/.test(tk)) continue; // bars / repeat counts / separators
+      else leftover.push(tk);
+    }
+    if (chords.length && leftover.length === 0) out.push(...chords);
+  }
+  return out;
+}
+
+function smartImport(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  const isTab = t.split('\n').some(l => /^[eEBGDA]\s*\|/.test(l.trim()));
+  if (isTab) {
+    setPlayerMode('tab');
+    document.getElementById('tab-input').value = t;
+    closeImport();
+    return;
+  }
+  const chords = importChordSheet(t);
+  if (chords.length) {
+    setPlayerMode('chords');
+    document.getElementById('chord-prog').value = chords.join(' ');
+    closeImport();
+  } else {
+    alert('Could not detect a tab or chord sheet.\n\nFor tab, include lines like  e|--0--2--3--\nFor chords, paste a chord sheet with chord names on their own lines above the lyrics.');
+  }
+}
+
 function getInfoText() {
   let text = '';
   if (state.view === 'all') text = 'All Notes';
@@ -1503,10 +1644,7 @@ function onTypeChange() {
     CHORD_NAMES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
     nameSel.disabled = false;
   } else if (type === 'scale') {
-    NAMED_SCALES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
-    nameSel.disabled = false;
-  } else if (type === 'mode') {
-    MODE_SCALES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nameSel.appendChild(o); });
+    SCALE_OPTIONS.forEach(([val, label]) => { const o = document.createElement('option'); o.value = val; o.textContent = label; nameSel.appendChild(o); });
     nameSel.disabled = false;
   } else {
     const o = document.createElement('option'); o.value = ''; o.textContent = '—'; nameSel.appendChild(o);
@@ -1526,7 +1664,7 @@ function onSettingChange() {
     state.view = root ? 'root' : 'all';
   } else if (type === 'chord') {
     state.view = 'chord'; state.chord = name || 'Major';
-  } else if (type === 'scale' || type === 'mode') {
+  } else if (type === 'scale') {
     state.view = 'scale'; state.scale = name || 'Ionian';
   }
   renderFretboard();
@@ -1546,9 +1684,10 @@ function toggleLabels() {
   renderFretboard();
 }
 
-function onThemeChange() {
-  state.dark = document.getElementById('sel-theme').value === 'dark';
+function toggleTheme() {
+  state.dark = !state.dark;
   document.body.className = state.dark ? 'dark' : 'light';
+  document.getElementById('sel-theme').textContent = state.dark ? 'Dark' : 'Light';
   renderFretboard();
 }
 
