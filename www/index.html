@@ -44,9 +44,6 @@ html, body {
 }
 #menu-toggle:active { opacity: 1; }
 
-/* ── Info display (hidden — shown inside fretboard SVG instead) ── */
-#info-display { display: none; }
-
 /* ── Slide-out menu ── */
 #menu-overlay {
   display: none; position: fixed; inset: 0; z-index: 100;
@@ -89,6 +86,9 @@ input[type="text"] { width: 100%; }
 .btn-danger { background: #cc0000; color: white; border-color: #cc0000; }
 .btn-sm { padding: 4px 8px; font-size: 11px; }
 
+/* ── Interactive fretboard elements ── */
+.note-dot, .strum-box { cursor: pointer; }
+
 /* ── Chip toggles (CAGED, Triads) ── */
 .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -125,7 +125,6 @@ body.light {
 <div id="app">
   <div id="fretboard-container"></div>
 </div>
-<div id="info-display">All Notes</div>
 <button id="menu-toggle" aria-label="Open menu">☰</button>
 
 <!-- Slide-out menu -->
@@ -478,7 +477,7 @@ function renderFretboard() {
 
   // Fret markers
   const mr = Math.min(fretW, strH) * 0.08;
-  for (const f of [3, 5, 7, 9, 15, 17, 19, 21]) {
+  for (const f of [3, 5, 7, 9]) {
     if (f < N_FRETS) svg += `<circle cx="${fx(f)}" cy="${cyMid}" r="${mr}" fill="${markerColor}"/>`;
   }
   if (12 < N_FRETS) {
@@ -516,27 +515,7 @@ function renderFretboard() {
 
   svg += '</svg>';
   container.innerHTML = svg;
-
-  // Add touch/click handlers to note dots
-  container.querySelectorAll('.note-dot').forEach(el => {
-    el.style.cursor = 'pointer';
-    el.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      playNote(parseFloat(el.dataset.freq), parseInt(el.dataset.s), parseInt(el.dataset.f));
-    });
-  });
-
-  // Add touch/click handlers to strum boxes
-  container.querySelectorAll('.strum-box').forEach(el => {
-    el.style.cursor = 'pointer';
-    el.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      const notes = JSON.parse(el.dataset.notes);
-      playStrum(notes, 30);
-    });
-  });
-
-  updateInfoDisplay();
+  // Playback is wired once via event delegation in init() — no per-render rebinding.
 }
 
 function getNoteCircles() {
@@ -584,7 +563,7 @@ function getNoteCircles() {
   for (let s = 0; s < ns; s++)
     for (let f = 0; f < N_FRETS; f++) {
       const ni = NOTES.indexOf(noteAt(s, f));
-      if (ni in degs || degs[ni] !== undefined) {
+      if (degs[ni] !== undefined) {
         const label = degs[ni];
         const color = INTERVAL_COLORS[label] || '#e74c3c';
         const display = state.labelMode === 'note' ? NOTES[ni] : label;
@@ -859,7 +838,7 @@ function parseChord(sym) {
   if (fm[rn]) rn = fm[rn];
   const ri = NOTES.indexOf(rn); if (ri === -1) return null;
   const norm = qual.toLowerCase().replace(/\s+/g, '');
-  const iv = PROG_CHORD_IVALS[qual] || PROG_CHORD_IVALS[qual.toLowerCase()] || PROG_CHORD_IVALS[norm] || [0, 4, 7];
+  const iv = PROG_CHORD_IVALS[qual] || PROG_CHORD_IVALS[norm] || [0, 4, 7];
   return { root: ri, ivals: iv, minFret, mods };
 }
 
@@ -997,25 +976,44 @@ function tabFreq(si, fr) {
 }
 
 function parseTabToken(tok) {
-  const m = tok.match(/^([eBGDAE]):(\d+)([hp\/\\~b]?)(\d*)$/);
+  const m = tok.match(/^([eBGDAE]):(\d+(?:[hp\/\\~b]\d*)*)$/);
   if (!m) return null;
   const si = tabSI(m[1]);
   if (si < 0 || si >= nStrings()) return null;
-  const fr = parseInt(m[2]);
-  const freq = tabFreq(si, fr);
-  const tech = m[3] || null;
-  const targetFr = m[4] ? parseInt(m[4]) : null;
-  const targetFreq = targetFr !== null ? tabFreq(si, targetFr) : null;
-  return { si, fr, freq, tech: tech || null, targetFr, targetFreq };
+  const parts = [];
+  const re = /(\d+)([hp\/\\~b]?)/g;
+  let match;
+  while ((match = re.exec(m[2])) !== null && match[1])
+    parts.push({ fr: parseInt(match[1]), tech: match[2] || null });
+  if (!parts.length) return null;
+  const notes = [];
+  let accDelay = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const { fr, tech } = parts[i];
+    const nextFr = (i + 1 < parts.length) ? parts[i + 1].fr : null;
+    const freq = tabFreq(si, fr);
+    const targetFr = (tech && nextFr !== null) ? nextFr : null;
+    const targetFreq = targetFr !== null ? tabFreq(si, targetFr) : null;
+    if (i === 0 || tech)
+      notes.push({ si, fr, freq, tech: tech || null, targetFr, targetFreq, _extraDelay: accDelay });
+    if (tech === 'h') accDelay += 65;
+    else if (tech === 'p') accDelay += 70;
+    else if (tech === '/' || tech === 'b' || tech === '\\') accDelay += 70;
+  }
+  return notes;
 }
 
 function parseLinearTab(text) {
-  const tokens = text.trim().split(/\s+/).filter(t => t && t !== '|');
+  const normalized = text.trim().replace(/([eBGDAE]):\s+/g, '$1:');
+  const tokens = normalized.split(/\s+/).filter(t => t && t !== '|');
   const events = [];
   let pos = 0;
   for (const tok of tokens) {
-    const note = parseTabToken(tok);
-    if (note) { events.push({ pos, notes: [note] }); pos++; }
+    const notes = parseTabToken(tok);
+    if (notes && notes.length) {
+      for (const note of notes) events.push({ pos, notes: [note], _extraDelay: note._extraDelay });
+      pos++;
+    }
   }
   return events;
 }
@@ -1073,35 +1071,37 @@ function parseTab(text) {
 
 function playTechNote(note, delayMs) {
   const { si, fr, freq, tech, targetFr, targetFreq } = note;
+  const guard = fn => () => { if (!tabRunning) return; fn(); };
   switch (tech) {
     case 'h':
-      setTimeout(() => playNote(freq, si, fr), delayMs);
-      setTimeout(() => playNote(targetFreq, si, targetFr), delayMs + 65);
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq, si, fr)), delayMs));
+      tabTimeouts.push(setTimeout(guard(() => playNote(targetFreq, si, targetFr)), delayMs + 65));
       break;
     case 'p':
-      setTimeout(() => playNote(freq, si, fr), delayMs);
-      setTimeout(() => playNote(targetFreq * 0.75, si, targetFr), delayMs + 70);
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq, si, fr)), delayMs));
+      tabTimeouts.push(setTimeout(guard(() => playNote(targetFreq * 0.75, si, targetFr)), delayMs + 70));
       break;
     case '/':
     case 'b':
-      setTimeout(() => playNote(freq * Math.pow(2, -2/12), si, fr), delayMs);
-      setTimeout(() => playNote(freq, si, fr), delayMs + 35);
-      if (targetFreq) setTimeout(() => playNote(targetFreq, si, targetFr), delayMs + 70);
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq * Math.pow(2, -2/12), si, fr)), delayMs));
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq, si, fr)), delayMs + 35));
+      if (targetFreq) tabTimeouts.push(setTimeout(guard(() => playNote(targetFreq, si, targetFr)), delayMs + 70));
       break;
     case '\\':
-      setTimeout(() => playNote(freq * Math.pow(2, 2/12), si, fr), delayMs);
-      setTimeout(() => playNote(freq, si, fr), delayMs + 35);
-      if (targetFreq) setTimeout(() => playNote(targetFreq, si, targetFr), delayMs + 70);
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq * Math.pow(2, 2/12), si, fr)), delayMs));
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq, si, fr)), delayMs + 35));
+      if (targetFreq) tabTimeouts.push(setTimeout(guard(() => playNote(targetFreq, si, targetFr)), delayMs + 70));
       break;
     case '~':
-      setTimeout(() => {
+      tabTimeouts.push(setTimeout(() => {
+        if (!tabRunning) return;
         playNote(freq, si, fr);
         [0.012, -0.012, 0.009, -0.009, 0.006, -0.006].forEach((d, i) =>
-          setTimeout(() => playNote(freq * (1 + d), si, fr), 185 + i * 90));
-      }, delayMs);
+          tabTimeouts.push(setTimeout(guard(() => playNote(freq * (1 + d), si, fr)), 185 + i * 90)));
+      }, delayMs));
       break;
     default:
-      setTimeout(() => playNote(freq, si, fr), delayMs);
+      tabTimeouts.push(setTimeout(guard(() => playNote(freq, si, fr)), delayMs));
   }
 }
 
@@ -1114,7 +1114,7 @@ function tabStepMs() {
 function eventsToLickNotes(events, stepMs) {
   const out = [];
   for (const ev of events) {
-    const t = ev.pos * stepMs;
+    const t = ev.pos * stepMs + (ev._extraDelay || 0);
     for (const n of ev.notes) {
       out.push({ f: n.freq, t, s: n.si, fr: n.fr });
       if (n.tech && n.targetFreq != null) {
@@ -1142,7 +1142,7 @@ function playTabWriter() {
   tabRunning = true;
   btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
   for (const ev of events) {
-    const base = ev.pos * stepMs;
+    const base = ev.pos * stepMs + (ev._extraDelay || 0);
     for (const note of ev.notes) playTechNote(note, base);
   }
   const totalMs = (Math.max(...events.map(e => e.pos)) + 1) * stepMs + 600;
@@ -1365,10 +1365,6 @@ function getInfoText() {
   return text;
 }
 
-function updateInfoDisplay() {
-  // Info is now rendered inside the SVG, so just re-render
-}
-
 function populateRootSelect() {
   const sel = document.getElementById('sel-root');
   NOTES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
@@ -1496,6 +1492,22 @@ function init() {
   onTypeChange();
   buildChips();
   loadLicks();
+
+  // Delegated playback: one listener handles every note dot and strum box,
+  // so renders never have to rebind handlers.
+  document.getElementById('fretboard-container').addEventListener('pointerdown', e => {
+    const dot = e.target.closest('.note-dot');
+    if (dot) {
+      e.preventDefault();
+      playNote(parseFloat(dot.dataset.freq), parseInt(dot.dataset.s), parseInt(dot.dataset.f));
+      return;
+    }
+    const box = e.target.closest('.strum-box');
+    if (box) {
+      e.preventDefault();
+      playStrum(JSON.parse(box.dataset.notes), 30);
+    }
+  });
 
   // Menu toggle
   document.getElementById('menu-toggle').addEventListener('click', openMenu);

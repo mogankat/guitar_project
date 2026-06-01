@@ -1,8 +1,9 @@
-const CACHE_NAME = 'guitar-fretboard-v2';
+const CACHE_NAME = 'guitar-fretboard-v3';
 const ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/icons/icon-192.svg'
 ];
 
 self.addEventListener('install', e => {
@@ -22,7 +23,25 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  const req = e.request;
+
+  // Network-first for page navigations so app updates land without a manual
+  // cache bump; fall back to the cached shell when offline.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req).then(r => r || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (icons, manifest, etc.).
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    caches.match(req).then(r => r || fetch(req))
   );
 });

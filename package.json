@@ -1,10 +1,11 @@
 {
   "name": "guitar_project",
   "version": "1.0.0",
-  "description": "",
-  "main": "sw.js",
+  "private": true,
+  "description": "Interactive guitar and bass fretboard visualizer with scales, chords, the CAGED system, a metronome, chord-progression and tab playback, and a looper. Ships as a PWA and a Capacitor Android app.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "sync:www": "cp index.html sw.js manifest.json www/ && mkdir -p www/icons && cp icons/* www/icons/",
+    "build:android": "npm run sync:www && cap sync android"
   },
   "repository": {
     "type": "git",
