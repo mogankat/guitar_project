@@ -64,6 +64,19 @@ html, body {
 .menu-section:last-child { border-bottom: none; }
 .menu-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* ── Menu tabs ── */
+.menu-tabs { display: flex; gap: 6px; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; background: var(--panel-bg); padding-bottom: 4px; }
+.menu-tab {
+  flex: 1; padding: 9px 4px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
+  background: var(--input-bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+}
+.menu-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.menu-footer { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
+
 .menu-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .menu-label { font-size: 12px; min-width: 50px; color: #aaa; }
 
@@ -131,6 +144,14 @@ body.light {
 <div id="menu-overlay">
   <div id="menu-panel">
 
+    <div class="menu-tabs">
+      <button class="menu-tab active" data-pane="board" onclick="switchPane('board')">Fretboard</button>
+      <button class="menu-tab" data-pane="tools" onclick="switchPane('tools')">Tools</button>
+    </div>
+
+    <!-- ══ Tab 1: Fretboard ══ -->
+    <div class="tab-pane active" id="pane-board">
+
     <!-- Fretboard Settings -->
     <div class="menu-section">
       <h3>Fretboard</h3>
@@ -178,6 +199,11 @@ body.light {
       <div class="chip-group" id="triad-chips"></div>
     </div>
 
+    </div><!-- /pane-board -->
+
+    <!-- ══ Tab 2: Tools ══ -->
+    <div class="tab-pane" id="pane-tools">
+
     <!-- Metronome -->
     <div class="menu-section">
       <h3>Metronome</h3>
@@ -192,62 +218,16 @@ body.light {
         <span class="menu-label">Time</span>
         <input id="metro-top" type="number" value="4" min="1" max="12" style="width:40px" oninput="metroUpdate()">
         <span>/</span>
-        <input id="metro-bot" type="number" value="4" min="1" max="32" style="width:40px" oninput="metroUpdate()">
-      </div>
-    </div>
-
-    <!-- Chord Progression -->
-    <div class="menu-section">
-      <h3>Chord Progression</h3>
-      <div class="menu-row">
-        <input id="chord-prog" type="text" placeholder="Am F C G" onkeydown="if(event.key==='Enter')playProgression()">
-      </div>
-      <div class="menu-row">
-        <span class="menu-label">BPM</span>
-        <input id="prog-bpm" type="number" value="120" min="40" max="240" style="width:52px">
-        <span class="menu-label" style="margin-left:8px">Beats</span>
-        <input id="prog-beats" type="number" value="4" min="1" max="32" style="width:44px">
-      </div>
-      <div class="menu-row">
-        <span class="menu-label">Pattern</span>
-        <input id="prog-pattern" type="text" placeholder="D D U D U" style="flex:1;min-width:0">
-      </div>
-      <div class="menu-row">
-        <button class="btn" id="prog-btn" onclick="playProgression()">▶ Play</button>
-      </div>
-      <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
-        <div>Pattern: D=down  U=up  X=mute  -=rest</div>
-        <div>Modifiers: Am<span style="font-family:monospace">(arp)</span> <span style="font-family:monospace">(arpd)</span> <span style="font-family:monospace">(pinch)</span> <span style="font-family:monospace">(slide)</span> <span style="font-family:monospace">(vib)</span></div>
-        <div>Tab: h=hammer-on  p=pull-off  /\=slide  ~=vibrato</div>
-      </div>
-    </div>
-
-    <!-- Tab Writer -->
-    <div class="menu-section">
-      <h3>Tab Writer</h3>
-      <textarea id="tab-input" rows="7" placeholder="Linear (one note per token):&#10;B:1/6 G:5h7 D:5h7&#10;&#10;ASCII (paste standard tab):&#10;e|--0----5h7--|&#10;B|--1/6--------|&#10;G|--5h7--------|"></textarea>
-      <div class="menu-row" style="margin-top:8px">
-        <span class="menu-label">BPM</span>
-        <input id="tab-bpm" type="number" value="120" min="40" max="240" style="width:52px">
-        <span class="menu-label" style="margin-left:6px">Step</span>
-        <select id="tab-subdiv">
-          <option value="4">1/4</option>
-          <option value="8" selected>1/8</option>
-          <option value="16">1/16</option>
+        <select id="metro-bot" style="width:56px" onchange="metroUpdate()">
+          <option value="2">2</option>
+          <option value="4" selected>4</option>
+          <option value="8">8</option>
+          <option value="16">16</option>
         </select>
+        <span id="metro-sig" style="font-size:11px;color:#888;margin-left:auto">4/4</span>
       </div>
-      <div class="menu-row">
-        <button class="btn" id="tab-play-btn" onclick="playTabWriter()">▶ Play</button>
-      </div>
-      <div class="menu-row">
-        <input id="tab-lick-name" type="text" placeholder="Lick name to save" style="flex:1;min-width:0">
-        <button class="btn" onclick="saveTabToLooper()">→ Looper</button>
-      </div>
-      <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
-        <div>Strings: <span style="font-family:monospace">e B G D A E</span> &nbsp;(e=high, E=low)</div>
-        <div>Format: <span style="font-family:monospace">STRING:FRET[TECH[FRET2]]</span></div>
-        <div>Techs: <span style="font-family:monospace">h</span>=hammer &nbsp;<span style="font-family:monospace">p</span>=pull-off &nbsp;<span style="font-family:monospace">/</span>=slide up &nbsp;<span style="font-family:monospace">\</span>=slide dn &nbsp;<span style="font-family:monospace">~</span>=vib &nbsp;<span style="font-family:monospace">b</span>=bend</div>
-        <div>In progression: <span style="font-family:monospace">tab:lickName</span></div>
+      <div style="font-size:10px;color:#888;line-height:1.5;margin-top:2px">
+        Tempo follows BPM (beats per minute). The time signature only sets the accent — beat 1 of each bar is emphasized.
       </div>
     </div>
 
@@ -268,17 +248,70 @@ body.light {
       <div id="lick-list"></div>
     </div>
 
-    <!-- Theme -->
+    <!-- Player (Chords / Tab) -->
     <div class="menu-section">
-      <h3>Theme</h3>
-      <div class="menu-row">
+      <h3>Player</h3>
+      <div class="menu-row" style="gap:6px">
+        <button class="btn btn-sm player-mode btn-active" data-mode="chords" onclick="setPlayerMode('chords')">Chords</button>
+        <button class="btn btn-sm player-mode" data-mode="tab" onclick="setPlayerMode('tab')">Tab</button>
+        <span class="menu-label" style="margin-left:auto">BPM</span>
+        <input id="player-bpm" type="number" value="120" min="40" max="240" style="width:52px">
+      </div>
+
+      <!-- Chords mode -->
+      <div id="player-chords">
+        <div class="menu-row">
+          <input id="chord-prog" type="text" placeholder="Am F C G" onkeydown="if(event.key==='Enter')playerPlay()">
+        </div>
+        <div class="menu-row">
+          <span class="menu-label">Beats</span>
+          <input id="prog-beats" type="number" value="4" min="1" max="32" style="width:44px">
+          <span class="menu-label" style="margin-left:8px">Pattern</span>
+          <input id="prog-pattern" type="text" placeholder="D D U D U" style="flex:1;min-width:0">
+        </div>
+        <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+          <div>Pattern: D=down  U=up  X=mute  -=rest</div>
+          <div>Modifiers: Am<span style="font-family:monospace">(arp)</span> <span style="font-family:monospace">(arpd)</span> <span style="font-family:monospace">(pinch)</span> <span style="font-family:monospace">(slide)</span> <span style="font-family:monospace">(vib)</span></div>
+          <div>Embed a saved lick: <span style="font-family:monospace">tab:lickName</span></div>
+        </div>
+      </div>
+
+      <!-- Tab mode -->
+      <div id="player-tab" style="display:none">
+        <textarea id="tab-input" rows="7" placeholder="Linear (one note per token):&#10;B:1/6 G:5h7 D:5h7&#10;&#10;ASCII (paste standard tab):&#10;e|--0----5h7--|&#10;B|--1/6--------|&#10;G|--5h7--------|"></textarea>
+        <div class="menu-row" style="margin-top:8px">
+          <span class="menu-label">Step</span>
+          <select id="tab-subdiv">
+            <option value="4">1/4</option>
+            <option value="8" selected>1/8</option>
+            <option value="16">1/16</option>
+          </select>
+          <input id="tab-lick-name" type="text" placeholder="Lick name to save" style="flex:1;min-width:0;margin-left:8px">
+          <button class="btn btn-sm" onclick="saveTabToLooper()">→ Looper</button>
+        </div>
+        <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+          <div>Strings: <span style="font-family:monospace">e B G D A E</span> &nbsp;(e=high, E=low)</div>
+          <div>Format: <span style="font-family:monospace">STRING:FRET[TECH[FRET2]]</span></div>
+          <div>Techs: <span style="font-family:monospace">h</span>=hammer &nbsp;<span style="font-family:monospace">p</span>=pull-off &nbsp;<span style="font-family:monospace">/</span>=slide up &nbsp;<span style="font-family:monospace">\</span>=slide dn &nbsp;<span style="font-family:monospace">~</span>=vib &nbsp;<span style="font-family:monospace">b</span>=bend</div>
+        </div>
+      </div>
+
+      <div class="menu-row" style="margin-top:8px">
+        <button class="btn" id="player-play-btn" onclick="playerPlay()">▶ Play</button>
+      </div>
+    </div>
+
+    </div><!-- /pane-tools -->
+
+    <!-- Persistent footer (shown on both tabs) -->
+    <div class="menu-footer">
+      <div class="menu-row" style="margin-bottom:0">
+        <span class="menu-label">Theme</span>
         <select id="sel-theme" onchange="onThemeChange()">
           <option value="dark">Dark</option>
           <option value="light">Light</option>
         </select>
-      </div>
-      <div class="menu-row" style="margin-top:8px">
-        <button class="btn" onclick="clearAll()">Clear All</button>
+        <button class="btn btn-sm" style="margin-left:auto" onclick="clearAll()">Clear All</button>
       </div>
     </div>
 
@@ -780,7 +813,7 @@ function metroTick() {
   gain.gain.setValueAtTime(isAccent ? 0.4 : 0.25, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
   osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.08);
-  metro.timeout = setTimeout(metroTick, 60000 / metro.bpm * (4 / metro.denom));
+  metro.timeout = setTimeout(metroTick, 60000 / metro.bpm);
 }
 
 function toggleMetronome() {
@@ -799,11 +832,11 @@ function toggleMetronome() {
 }
 
 function metroUpdate() {
-  if (metro.running) {
-    metro.bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
-    metro.beats = parseInt(document.getElementById('metro-top').value) || 4;
-    metro.denom = parseInt(document.getElementById('metro-bot').value) || 4;
-  }
+  metro.bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+  metro.beats = parseInt(document.getElementById('metro-top').value) || 4;
+  metro.denom = parseInt(document.getElementById('metro-bot').value) || 4;
+  const sig = document.getElementById('metro-sig');
+  if (sig) sig.textContent = metro.beats + '/' + metro.denom;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -913,7 +946,7 @@ function playProgression() {
     ? input.split(',').map(s => s.trim()).filter(Boolean)
     : input.split(/\s+/).filter(Boolean);
   if (!syms.length) return;
-  const btn = document.getElementById('prog-btn');
+  const btn = document.getElementById('player-play-btn');
   if (progRunning) {
     progRunning = false; clearTimeout(progTimeout);
     btn.textContent = '▶ Play'; btn.className = 'btn';
@@ -921,7 +954,7 @@ function playProgression() {
   }
   progRunning = true;
   btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
-  const bpm = parseInt(document.getElementById('prog-bpm').value) || 120;
+  const bpm = parseInt(document.getElementById('player-bpm').value) || 120;
   const bpc = parseInt(document.getElementById('prog-beats').value) || 4;
   const mspc = Math.round(60000 / bpm * bpc);
   const pattern = parseStrumPattern(patternStr);
@@ -1106,7 +1139,7 @@ function playTechNote(note, delayMs) {
 }
 
 function tabStepMs() {
-  const bpm = parseInt(document.getElementById('tab-bpm').value) || 120;
+  const bpm = parseInt(document.getElementById('player-bpm').value) || 120;
   const subdiv = parseInt(document.getElementById('tab-subdiv').value) || 8;
   return Math.round(60000 / bpm * 4 / subdiv);
 }
@@ -1127,7 +1160,7 @@ function eventsToLickNotes(events, stepMs) {
 }
 
 function playTabWriter() {
-  const btn = document.getElementById('tab-play-btn');
+  const btn = document.getElementById('player-play-btn');
   if (tabRunning) {
     tabRunning = false;
     tabTimeouts.forEach(clearTimeout); tabTimeouts = [];
@@ -1354,6 +1387,34 @@ function closeMenu() {
   document.getElementById('menu-panel').classList.remove('open');
 }
 
+function switchPane(name) {
+  document.querySelectorAll('.menu-tab').forEach(t => t.classList.toggle('active', t.dataset.pane === name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+}
+
+// ── Player: shared Chords / Tab section ──
+let playerMode = 'chords';
+
+function stopPlayback() {
+  if (progRunning) { progRunning = false; clearTimeout(progTimeout); }
+  if (tabRunning) { tabRunning = false; tabTimeouts.forEach(clearTimeout); tabTimeouts = []; }
+  const btn = document.getElementById('player-play-btn');
+  if (btn) { btn.textContent = '▶ Play'; btn.className = 'btn'; }
+}
+
+function setPlayerMode(mode) {
+  stopPlayback();
+  playerMode = mode;
+  document.querySelectorAll('.player-mode').forEach(b => b.classList.toggle('btn-active', b.dataset.mode === mode));
+  document.getElementById('player-chords').style.display = mode === 'chords' ? '' : 'none';
+  document.getElementById('player-tab').style.display = mode === 'tab' ? '' : 'none';
+}
+
+function playerPlay() {
+  if (playerMode === 'tab') playTabWriter();
+  else playProgression();
+}
+
 function getInfoText() {
   let text = '';
   if (state.view === 'all') text = 'All Notes';
@@ -1492,6 +1553,7 @@ function init() {
   onTypeChange();
   buildChips();
   loadLicks();
+  metroUpdate();
 
   // Delegated playback: one listener handles every note dot and strum box,
   // so renders never have to rebind handlers.
