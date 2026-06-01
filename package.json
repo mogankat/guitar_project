@@ -1,0 +1,27 @@
+{
+  "name": "guitar_project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive guitar and bass fretboard visualizer with scales, chords, the CAGED system, a metronome, chord-progression and tab playback, and a looper. Ships as a PWA and a Capacitor Android app.",
+  "scripts": {
+    "sync:www": "cp index.html sw.js manifest.json www/ && mkdir -p www/icons && cp icons/* www/icons/",
+    "build:android": "npm run sync:www && cap sync android"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mogankat/guitar_project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mogankat/guitar_project/issues"
+  },
+  "homepage": "https://github.com/mogankat/guitar_project#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0"
+  }
+}
