@@ -122,6 +122,12 @@ input[type="text"] { width: 100%; }
 }
 .chip.active { background: var(--accent); color: white; border-color: var(--accent); }
 
+/* ── Diatonic "Chords in Key" chips (roman numeral over chord name) ── */
+.keychip { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.1; padding: 4px 9px; }
+.keychip .rn { font-size: 10px; font-weight: 700; opacity: 0.7; }
+.keychip .cn { font-size: 13px; font-weight: 700; }
+.keychip.active .rn { opacity: 0.9; }
+
 /* ── Lick list ── */
 #lick-list .lick-item { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 #lick-list .lick-item button { flex-shrink: 0; }
@@ -168,7 +174,7 @@ body.light {
       <h3>Fretboard</h3>
       <div class="menu-row">
         <span class="menu-label">Root</span>
-        <select id="sel-root" onchange="onSettingChange()">
+        <select id="sel-root" onchange="onRootChange()">
           <option value="">—</option>
         </select>
       </div>
@@ -197,6 +203,18 @@ body.light {
       </div>
     </div>
 
+    <!-- Chords in Key (diatonic) -->
+    <div class="menu-section" id="diatonic-section">
+      <h3>Chords in Key</h3>
+      <div class="menu-row">
+        <span class="menu-label">Show</span>
+        <button class="btn" id="diatonic-btn" onclick="toggleDiatonic()">Off</button>
+        <span id="diatonic-key" style="font-size:11px;color:#888;margin-left:auto"></span>
+      </div>
+      <div class="chip-group" id="diatonic-chips" style="margin-top:8px"></div>
+      <div id="diatonic-hint" style="font-size:10px;color:#888;line-height:1.5;margin-top:6px"></div>
+    </div>
+
     <!-- CAGED -->
     <div class="menu-section" id="caged-section">
       <h3>CAGED Shapes</h3>
@@ -207,6 +225,18 @@ body.light {
     <div class="menu-section">
       <h3>Triads</h3>
       <div class="chip-group" id="triad-chips"></div>
+    </div>
+
+    <!-- Send the current chord + shape to the Player -->
+    <div class="menu-section" id="send-section">
+      <h3>Send to Player</h3>
+      <div class="menu-row">
+        <button class="btn" id="send-btn" onclick="sendCurrentToPlayer()">→ Add to Player</button>
+        <span id="send-preview" style="margin-left:auto;font-size:12px;color:#aaa;font-family:monospace"></span>
+      </div>
+      <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+        Adds the current <b>Root + Name</b> with the selected shape to the Player's chord box. A selected Triad wins over a CAGED shape; with neither, the shape is auto-picked. Build chords one at a time and add each — the tab doesn't switch.
+      </div>
     </div>
 
     </div><!-- /pane-board -->
@@ -285,15 +315,54 @@ body.light {
       <!-- Chords mode -->
       <div id="player-chords">
         <div class="menu-row">
-          <input id="chord-prog" type="text" placeholder="Am F C G" onkeydown="if(event.key==='Enter')playerPlay()">
+          <input id="chord-prog" type="text" placeholder="Am F C G  ·  or  C@A F@E G@G" oninput="refreshChordSet()" onkeydown="if(event.key==='Enter')playerPlay()">
         </div>
+
+        <!-- Shape builder: append a chord (with optional CAGED shape) to the box -->
+        <div id="cs-controls">
+        <div class="menu-row" style="gap:6px">
+          <select id="cs-root" style="width:auto;flex:0 0 auto"></select>
+          <select id="cs-qual" style="width:auto;flex:0 0 auto">
+            <option value="Major">Major</option>
+            <option value="Minor">Minor</option>
+            <option value="7">7</option>
+            <option value="Dim">Dim</option>
+            <option value="Sus2">Sus2</option>
+            <option value="Sus4">Sus4</option>
+            <option value="Aug">Aug</option>
+          </select>
+          <select id="cs-shape" style="width:auto;flex:0 0 auto">
+            <option value="auto">Auto</option>
+            <option value="C">C-shape</option>
+            <option value="A">A-shape</option>
+            <option value="G">G-shape</option>
+            <option value="E">E-shape</option>
+            <option value="D">D-shape</option>
+            <option value="t1">Triad 1·2·3</option>
+            <option value="t2">Triad 2·3·4</option>
+            <option value="t3">Triad 3·4·5</option>
+            <option value="t4">Triad 4·5·6</option>
+          </select>
+          <button class="btn btn-sm" onclick="chordSetAdd()">+ Add</button>
+        </div>
+
+        <!-- Show the progression's chords as shapes on the fretboard -->
         <div class="menu-row">
+          <span class="menu-label">Shapes</span>
+          <button class="btn" id="chordset-btn" onclick="toggleChordSet()">Off</button>
+          <span style="margin-left:auto;font-size:10px;color:#888">show chords on fretboard</span>
+        </div>
+        <div class="chip-group" id="cs-chips" style="margin-top:2px"></div>
+        </div><!-- /cs-controls -->
+
+        <div class="menu-row" style="margin-top:8px">
           <span class="menu-label">Beats</span>
           <input id="prog-beats" type="number" value="4" min="1" max="32" style="width:44px">
           <span class="menu-label" style="margin-left:8px">Pattern</span>
           <input id="prog-pattern" type="text" placeholder="D D U D U" style="flex:1;min-width:0">
         </div>
         <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+          <div>Shapes: add <span style="font-family:monospace">@A @C @G @E @D</span> after a chord (e.g. <span style="font-family:monospace">F@E</span>); omit to auto-pick. Tap a chip to strum. Notes shared between chords show in gold with a ring.</div>
           <div>Pattern: D=down  U=up  X=mute  -=rest</div>
           <div>Modifiers: Am<span style="font-family:monospace">(arp)</span> <span style="font-family:monospace">(arpd)</span> <span style="font-family:monospace">(pinch)</span> <span style="font-family:monospace">(slide)</span> <span style="font-family:monospace">(vib)</span></div>
           <div>Embed a saved lick: <span style="font-family:monospace">tab:lickName</span></div>
@@ -441,8 +510,30 @@ const PROG_CHORD_IVALS = {
 const state = {
   root: '', view: 'all', chord: 'Major', scale: 'Ionian',
   instrument: 'guitar', labelMode: 'note', dark: true,
-  caged: new Set(), triadGrps: new Set()
+  caged: new Set(), triadGrps: new Set(),
+  diatonic: true, keyRoot: '',
+  chordSet: [], chordSetOn: false
 };
+
+// Distinct box colors for chords shown together in a Chord Set.
+const CHORD_SET_COLORS = ['#2980b9','#e67e22','#16a085','#8e44ad','#c0392b','#27ae60','#d35400','#7f8c8d'];
+// Chord-name suffix per quality (for labels and the text-list field).
+const QSUF = { Major:'', Minor:'m', '7':'7', Dim:'°', Sus2:'sus2', Sus4:'sus4', Aug:'aug' };
+// Flat spellings → the sharp names used internally.
+const FLATS = { CB:'B', DB:'C#', EB:'D#', FB:'E', GB:'F#', AB:'G#', BB:'A#' };
+
+// Diatonic triads of a major key, by scale degree (semitones from the tonic).
+// I ii iii IV V vi vii° — the chord family for "where to go next".
+const DIATONIC_MAJOR = [
+  { deg: 0,  roman: 'I',    type: 'Major' },
+  { deg: 2,  roman: 'ii',   type: 'Minor' },
+  { deg: 4,  roman: 'iii',  type: 'Minor' },
+  { deg: 5,  roman: 'IV',   type: 'Major' },
+  { deg: 7,  roman: 'V',    type: 'Major' },
+  { deg: 9,  roman: 'vi',   type: 'Minor' },
+  { deg: 11, roman: 'vii°', type: 'Dim'   }
+];
+const DIATONIC_SUFFIX = { Major: '', Minor: 'm', Dim: '°' };
 
 function isBass() { return state.instrument === 'bass'; }
 function getStrNotes() { return INSTRUMENTS[state.instrument].notes; }
@@ -463,7 +554,7 @@ function getCtx() {
 
 function playNote(freq, si, fr) {
   if (si != null && fr != null) {
-    if (lickRec) lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr });
+    if (lickRec) lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr, chord: progRunning });
     highlightPlayedNote(si, fr);
   }
   const ctx = getCtx(), sr = ctx.sampleRate;
@@ -590,17 +681,28 @@ function renderFretboard() {
     svg += `<text x="${cx}" y="${cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${nc.display}</text>`;
   }
 
+  // Chord Set takes over the board: when active, the single-chord pattern,
+  // CAGED, and triads are suppressed so only the chosen shapes are shown.
+  const csActive = chordSetActive();
+
   // CAGED boxes
-  const cagedParts = getCagedParts(fx, sy, circleR, fontSize);
+  const cagedParts = csActive ? '' : getCagedParts(fx, sy, circleR, fontSize);
   svg += cagedParts;
 
   // Triad boxes
-  const triadParts = getTriadParts(fx, sy, circleR, fontSize);
+  const triadParts = csActive ? '' : getTriadParts(fx, sy, circleR, fontSize);
   svg += triadParts;
 
-  // Info label (inside SVG, top-left within the padding zone)
-  const infoText = getInfoText();
-  svg += `<text x="${padL}" y="${14}" font-family="Arial" font-size="10" fill="${dark ? '#666' : '#aaa'}" pointer-events="none">${infoText}</text>`;
+  // Chord Set boxes (multiple chords as playable shapes, drawn at once)
+  svg += getChordSetParts(fx, sy, circleR, fontSize);
+
+  // Source badge (top-left): shows whether the Player or the Fretboard tab is
+  // currently driving the board, then the details of what's shown.
+  const info = getInfoText();
+  const srcColor = info.src === 'PLAYER' ? '#2980b9' : (dark ? '#7a8a99' : '#999');
+  svg += `<text x="${padL}" y="${14}" font-family="Arial" font-size="10" pointer-events="none">`
+    + `<tspan fill="${srcColor}" font-weight="bold">${info.src}</tspan>`
+    + `<tspan fill="${dark ? '#666' : '#aaa'}">  ${info.text}</tspan></text>`;
 
   svg += '</svg>';
   container.innerHTML = svg;
@@ -608,6 +710,9 @@ function renderFretboard() {
 }
 
 function getNoteCircles() {
+  // Chord Set mode draws its own shapes; hide the normal note pattern.
+  if (chordSetActive()) return [];
+
   const rootIdx = NOTES.indexOf(state.root);
   const sFreqs = getStrFreqs();
   const ns = nStrings();
@@ -766,17 +871,22 @@ function getTriadParts(fx, sy, circleR, fontSize) {
 }
 
 // Triads constrained to a CAGED shape: for each selected group (3 adjacent
-// strings) draw one box around the cage's notes that fall on those strings.
+// strings) draw a box around the cage's own notes on those strings — but only
+// when the shape actually contains a complete triad there. The box must wrap
+// all three strings (the shape can't mute one of them, e.g. C shape on D-A-E)
+// AND those notes must be three distinct tones (the shape can't double a tone
+// and drop another, e.g. G shape giving G-D-G). Otherwise draw nothing.
 function getCagedTriadBoxes(fx, sy, circleR) {
   const shapes = computeCagedShapes();
   if (!shapes.length) return '';
+  const gtr = INSTRUMENTS.guitar.notes.map(n => NOTES.indexOf(n));
   let svg = '';
   for (const { notes } of shapes) {
     for (const g of state.triadGrps) {
       const sel = notes.filter(p => p.si >= g && p.si <= g + 2);
-      // Require the complete triad: all three of the group's strings must exist
-      // in this cage shape, otherwise don't box a partial (2-note) triad.
-      if (sel.length < 3) continue;
+      if (sel.length < 3) continue;                                  // a string is muted in this shape
+      const distinct = new Set(sel.map(p => (gtr[p.si] + p.fret) % 12)).size;
+      if (distinct < 3) continue;                                    // not a complete triad in this shape
       const xs = sel.map(p => fx(p.fret));
       const ys = sel.map(p => sy(p.si));
       const pad = circleR + 1.5; // nest just inside the cage box (circleR + 4)
@@ -790,53 +900,197 @@ function getCagedTriadBoxes(fx, sy, circleR) {
 // ── CAGED logic ──
 // Compute the notes of each selected CAGED shape (best chord-tone near each
 // pattern position). Returns [{ shapeName, notes: [{si, fret, color, display, freq}] }].
+// Compute the notes of one CAGED shape for a given root + chord quality, on
+// guitar. Picks the best chord tone near each pattern position. Returns
+// [{ si, fret, color, display, freq, isRoot }] or null if it won't fit.
+function computeShapeNotes(rootIdx, chordName, shapeName) {
+  if (rootIdx < 0) return null;
+  const shape = CAGED_SHAPES[shapeName];
+  if (!shape) return null;
+  const chordDegs = CHORD_DEGREES[chordName] || CHORD_DEGREES.Major;
+  const sFreqs = INSTRUMENTS.guitar.freqs;
+  const sNotes = INSTRUMENTS.guitar.notes;
+  const openNi = NOTES.indexOf(sNotes[shape.root_string]);
+  let baseFret = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
+  if (baseFret < 0) baseFret += 12;
+  if (baseFret >= N_FRETS) return null;
+
+  const notes = [];
+  for (let si = 0; si < shape.pattern.length; si++) {
+    const offset = shape.pattern[si];
+    if (offset === -1) continue;
+    const expFret = baseFret + offset;
+    if (expFret >= N_FRETS) continue;
+    const openSn = NOTES.indexOf(sNotes[si]);
+    let bestFret = null, bestLabel = null, bestDist = 999;
+    for (const interval in chordDegs) {
+      const label = chordDegs[interval];
+      const target = (rootIdx + parseInt(interval)) % 12;
+      const basePos = (target - openSn + 120) % 12;
+      for (let oct = -1; oct < 3; oct++) {
+        const f = basePos + oct * 12;
+        if (f >= 0 && f < N_FRETS) {
+          const d = Math.abs(f - expFret);
+          if (d < bestDist) { bestDist = d; bestFret = f; bestLabel = label; }
+        }
+      }
+    }
+    if (bestFret === null || bestDist > 3) continue;
+    const ni = (NOTES.indexOf(sNotes[si]) + bestFret) % 12;
+    const color = INTERVAL_COLORS[bestLabel] || '#888';
+    const display = state.labelMode === 'note' ? NOTES[ni] : bestLabel;
+    const freq = Math.round(sFreqs[si] * Math.pow(2, bestFret / 12) * 10000) / 10000;
+    notes.push({ si, fret: bestFret, color, display, freq, isRoot: bestLabel === 'R' });
+  }
+  return notes.length ? notes : null;
+}
+
+// Pick the lowest playable CAGED shape for a root + quality (open/low first).
+function autoShapeFor(rootIdx, chordName) {
+  let best = null, bestBase = 99;
+  for (const s of ['E', 'A', 'G', 'C', 'D']) {
+    const shape = CAGED_SHAPES[s];
+    const openNi = NOTES.indexOf(INSTRUMENTS.guitar.notes[shape.root_string]);
+    let base = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
+    if (base < 0) base += 12;
+    if (base >= N_FRETS) continue;
+    if (computeShapeNotes(rootIdx, chordName, s) && base < bestBase) { bestBase = base; best = s; }
+  }
+  return best;
+}
+
 function computeCagedShapes() {
   if (isBass() || !state.caged.size) return [];
   const rootIdx = NOTES.indexOf(state.root);
   if (rootIdx < 0) return [];
-  const chordDegs = CHORD_DEGREES[state.chord] || CHORD_DEGREES.Major;
-  const sFreqs = INSTRUMENTS.guitar.freqs;
-  const sNotes = INSTRUMENTS.guitar.notes;
   const out = [];
-
   for (const shapeName of state.caged) {
-    const shape = CAGED_SHAPES[shapeName];
-    if (!shape) continue;
-    const openNi = NOTES.indexOf(sNotes[shape.root_string]);
-    let baseFret = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
-    if (baseFret < 0) baseFret += 12;
-    if (baseFret >= N_FRETS) continue;
-
-    const notes = [];
-    for (let si = 0; si < shape.pattern.length; si++) {
-      const offset = shape.pattern[si];
-      if (offset === -1) continue;
-      const expFret = baseFret + offset;
-      if (expFret >= N_FRETS) continue;
-      const openSn = NOTES.indexOf(sNotes[si]);
-      let bestFret = null, bestLabel = null, bestDist = 999;
-      for (const interval in chordDegs) {
-        const label = chordDegs[interval];
-        const target = (rootIdx + parseInt(interval)) % 12;
-        const basePos = (target - openSn + 120) % 12;
-        for (let oct = -1; oct < 3; oct++) {
-          const f = basePos + oct * 12;
-          if (f >= 0 && f < N_FRETS) {
-            const d = Math.abs(f - expFret);
-            if (d < bestDist) { bestDist = d; bestFret = f; bestLabel = label; }
-          }
-        }
-      }
-      if (bestFret === null || bestDist > 3) continue;
-      const ni = NOTES.indexOf(noteAt(si, bestFret));
-      const color = INTERVAL_COLORS[bestLabel] || '#888';
-      const display = state.labelMode === 'note' ? NOTES[ni] : bestLabel;
-      const freq = Math.round(sFreqs[si] * Math.pow(2, bestFret / 12) * 10000) / 10000;
-      notes.push({ si, fret: bestFret, color, display, freq });
-    }
-    if (notes.length) out.push({ shapeName, notes });
+    const notes = computeShapeNotes(rootIdx, state.chord, shapeName);
+    if (notes) out.push({ shapeName, notes });
   }
   return out;
+}
+
+// ── Chord Set: several chords shown at once as playable shape boxes ──
+function chordSetActive() {
+  return !isBass() && state.chordSetOn && state.chordSet.length > 0;
+}
+
+// Lowest playable triad voicing (root, 3rd, 5th) on a 3-string set. g is the
+// top string index of the set: 0 = strings 1-2-3 … 3 = strings 4-5-6.
+function computeTriadVoicing(rootIdx, chordName, g, target) {
+  if (g < 0 || g + 2 >= 6) return null;
+  const deg = CHORD_DEGREES[chordName] || CHORD_DEGREES.Major;
+  const sFreqs = INSTRUMENTS.guitar.freqs, sNotes = INSTRUMENTS.guitar.notes;
+  const tonePc = {};
+  for (const iv in deg) tonePc[(rootIdx + parseInt(iv)) % 12] = deg[iv];
+  const need = new Set(Object.values(deg));
+  const cand = [g, g + 1, g + 2].map(si => {
+    const open = NOTES.indexOf(sNotes[si]);
+    const arr = [];
+    for (let f = 0; f < N_FRETS; f++) { const pc = (open + f) % 12; if (tonePc[pc] !== undefined) arr.push({ si, fret: f, label: tonePc[pc] }); }
+    return arr;
+  });
+  let best = null;
+  for (const a of cand[0]) for (const b of cand[1]) for (const c of cand[2]) {
+    const labels = new Set([a.label, b.label, c.label]);
+    if (labels.size < need.size) continue;                 // need every chord tone
+    const frets = [a.fret, b.fret, c.fret];
+    if (Math.max(...frets) - Math.min(...frets) > 4) continue;
+    const minF = Math.min(...frets);
+    // With a target fret, pick the voicing nearest it; otherwise the lowest.
+    const score = (target != null) ? Math.abs(minF - target) : minF;
+    if (!best || score < best.score) best = { score, minF, voicing: [a, b, c] };
+  }
+  if (!best) return null;
+  return best.voicing.map(p => ({
+    si: p.si, fret: p.fret, isRoot: p.label === 'R',
+    display: state.labelMode === 'note' ? NOTES[(NOTES.indexOf(sNotes[p.si]) + p.fret) % 12] : p.label,
+    freq: Math.round(sFreqs[p.si] * Math.pow(2, p.fret / 12) * 10000) / 10000
+  }));
+}
+
+// Base fret of a CAGED shape for a given root (where the shape pattern sits).
+function shapeBaseFret(rootIdx, shapeName) {
+  const sh = CAGED_SHAPES[shapeName];
+  const open = NOTES.indexOf(INSTRUMENTS.guitar.notes[sh.root_string]);
+  let b = (rootIdx - open) % 12 - sh.root_fret_in_pattern;
+  if (b < 0) b += 12;
+  return b;
+}
+
+// Resolve a chord-set entry to its shape name and notes. Shape may be:
+//   'auto' / a CAGED letter (full barre shape),
+//   't1'..'t4' (a triad on a string-set, lowest position),
+//   '<CAGED><1-4>' e.g. 'E2' (that string-set's triad voiced inside the shape).
+function chordSetEntryNotes(c) {
+  const rootIdx = NOTES.indexOf(c.root);
+  if (rootIdx < 0) return null;
+  // Shape-constrained triad: the 3 strings of the set, voiced in the shape's
+  // region (e.g. G@E2 → the E-shape's B·G·D notes at frets 3·4·5).
+  if (c.shape && /^[CAGED][1-4]$/.test(c.shape)) {
+    const letter = c.shape[0], g = parseInt(c.shape[1]) - 1;
+    const notes = computeTriadVoicing(rootIdx, c.q, g, shapeBaseFret(rootIdx, letter));
+    return notes ? { shapeName: letter + ' tri ' + (g + 1) + '·' + (g + 2) + '·' + (g + 3), notes } : null;
+  }
+  if (c.shape && /^t[1-4]$/.test(c.shape)) {
+    const g = parseInt(c.shape[1]) - 1;
+    const notes = computeTriadVoicing(rootIdx, c.q, g);
+    return notes ? { shapeName: 'str ' + (g + 1) + '·' + (g + 2) + '·' + (g + 3), notes } : null;
+  }
+  const shapeName = (c.shape && c.shape !== 'auto') ? c.shape : autoShapeFor(rootIdx, c.q);
+  if (!shapeName) return null;
+  const notes = computeShapeNotes(rootIdx, c.q, shapeName);
+  return notes ? { shapeName, notes } : null;
+}
+
+function getChordSetParts(fx, sy, circleR, fontSize) {
+  if (!chordSetActive()) return '';
+
+  // Resolve every chord's shape first so we can find positions shared between
+  // chords (same string+fret) and call them out — easy to see what stays put
+  // across a change.
+  const drawn = [];
+  state.chordSet.forEach((c, idx) => {
+    const res = chordSetEntryNotes(c);
+    if (res) drawn.push({ c, col: CHORD_SET_COLORS[idx % CHORD_SET_COLORS.length], notes: res.notes, shapeName: res.shapeName });
+  });
+  const posCount = {};
+  drawn.forEach(d => d.notes.forEach(p => { const k = p.si + ',' + p.fret; posCount[k] = (posCount[k] || 0) + 1; }));
+
+  let svg = '';
+  // Boxes, labels, and the notes unique to each chord.
+  for (const d of drawn) {
+    const parts = d.notes.map(p => ({ ...p, cx: fx(p.fret), cy: sy(p.si) }));
+    const xs = parts.map(p => p.cx), ys = parts.map(p => p.cy);
+    const pad = circleR + 5;
+    const dnotes = parts.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+    svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" rx="6" stroke="${d.col}" stroke-width="2.5" fill="transparent" class="strum-box" data-notes='${JSON.stringify(dnotes)}'/>`;
+    const label = d.c.root + (QSUF[d.c.q] || '') + ' (' + d.shapeName + ')';
+    svg += `<text x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad - 3}" font-family="Arial" font-size="${Math.max(8, circleR * 0.6)}" font-weight="bold" fill="${d.col}">${label}</text>`;
+    for (const p of parts) {
+      if (posCount[p.si + ',' + p.fret] >= 2) continue;   // shared notes drawn on top
+      svg += `<circle cx="${p.cx}" cy="${p.cy}" r="${circleR}" fill="${d.col}" stroke="${p.isRoot ? '#fff' : d.col}" stroke-width="${p.isRoot ? 2.5 : 1}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
+      svg += `<text x="${p.cx}" y="${p.cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${p.display}</text>`;
+    }
+  }
+
+  // Shared notes: one dot in a stand-out colour with a halo ring, so you can
+  // see which notes are common to two or more of the chords.
+  const sharedFill = state.dark ? '#f1c40f' : '#e67e22';
+  const haloColor = state.dark ? '#fff' : '#222';
+  const seen = {};
+  for (const d of drawn) for (const p of d.notes) {
+    const k = p.si + ',' + p.fret;
+    if (posCount[k] < 2 || seen[k]) continue;
+    seen[k] = true;
+    const cx = fx(p.fret), cy = sy(p.si);
+    const ni = (NOTES.indexOf(INSTRUMENTS.guitar.notes[p.si]) + p.fret) % 12;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${circleR + 2.5}" fill="none" stroke="${haloColor}" stroke-width="1.5"/>`;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${circleR}" fill="${sharedFill}" stroke="${sharedFill}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
+    svg += `<text x="${cx}" y="${cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="#222" pointer-events="none">${state.labelMode === 'note' ? NOTES[ni] : p.display}</text>`;
+  }
+  return svg;
 }
 
 function getCagedParts(fx, sy, circleR, fontSize) {
@@ -983,7 +1237,12 @@ function chordToNotes(chord) {
       }
     }
   }
-  return notes;
+  // Keep the chord root in the bass: drop the lowest strings until the lowest
+  // sounding note is the root. This removes e.g. the low E from an open Am
+  // (which would otherwise sound an E in the bass) so chords/arpeggios voice
+  // from their root upward, like a guitarist would play them.
+  const firstRoot = notes.findIndex(n => (NOTES.indexOf(sNotes[n[1]]) + n[2]) % 12 === chord.root);
+  return firstRoot > 0 ? notes.slice(firstRoot) : notes;
 }
 
 // notes are ordered low-string-first (downstroke order)
@@ -1069,7 +1328,10 @@ function playProgression() {
     } else {
       const c = parseChord(sym);
       if (c) {
-        const notes = chordToNotes(c);
+        // If the token carries a shape (e.g. C@A or C@t2), play that exact
+        // voicing — otherwise build a generic voicing. This makes the player
+        // match what the chip/fretboard shows for shaped chords.
+        const notes = shapeVoicingNotes(sym) || chordToNotes(c);
         const mods = c.mods || {};
         if (pattern) {
           const strokeMs = mspc / pattern.length;
@@ -1464,6 +1726,7 @@ function genTab(lick) {
     const prev = cols[ci - 1], cur = cols[ci];
     if (prev.length !== 1 || cur.length !== 1) continue;
     const pn = prev[0], cn = cur[0];
+    if (pn.chord || cn.chord) continue;   // chord/arpeggio notes aren't legato
     if (pn.s !== cn.s || pn.fr === cn.fr) continue;
     const dt = cn.t - pn.t;
     const tech = dt < 80 ? (pn.fr < cn.fr ? '/' : '\\') : (pn.fr < cn.fr ? 'h' : 'p');
@@ -1620,15 +1883,21 @@ function smartImport(text) {
   }
 }
 
+// Returns { src, text } describing what's currently driving the board: the
+// Player (chord shapes) takes priority when its Shapes toggle is on, otherwise
+// the Fretboard tab's selection is shown.
 function getInfoText() {
+  if (chordSetActive())
+    return { src: 'PLAYER', text: state.chordSet.map(c => c.root + (QSUF[c.q] || '')).join(' ') + ' · shapes' };
   let text = '';
   if (state.view === 'all') text = 'All Notes';
   else if (state.view === 'root') text = state.root + ' Root';
   else if (state.view === 'chord') text = state.root + ' ' + state.chord;
   else if (state.view === 'scale') text = state.root + ' ' + state.scale;
+  if (state.diatonic && state.keyRoot) text += ' | Key ' + state.keyRoot;
   if (state.caged.size) text += ' | CAGED: ' + [...state.caged].join('');
   if (state.triadGrps.size) text += ' | Triads';
-  return text;
+  return { src: 'FRETBOARD', text };
 }
 
 function populateRootSelect() {
@@ -1667,6 +1936,8 @@ function onSettingChange() {
   } else if (type === 'scale') {
     state.view = 'scale'; state.scale = name || 'Ionian';
   }
+  buildDiatonicChips();
+  updateSendPreview();
   renderFretboard();
 }
 
@@ -1691,16 +1962,287 @@ function toggleTheme() {
   renderFretboard();
 }
 
+// Clear All resets everything on both tabs: the fretboard view and the
+// Metronome/Player (including any chords, tabs and shapes set).
 function clearAll() {
+  clearBoard();
+  clearTools();
+}
+
+function clearBoard() {
   state.view = 'all'; state.root = ''; state.caged.clear(); state.triadGrps.clear();
+  state.diatonic = true; state.keyRoot = '';     // Chords in Key defaults to On
+  updateDiatonicBtn();
   document.getElementById('sel-root').value = '';
   document.getElementById('sel-type').value = 'all';
   onTypeChange();
   buildChips();
+  buildDiatonicChips();
   renderFretboard();
 }
 
+function clearTools() {
+  // Metronome → defaults (stop if running)
+  if (metro.running) toggleMetronome();
+  document.getElementById('metro-bpm').value = 120;
+  document.getElementById('metro-top').value = 4;
+  document.getElementById('metro-bot').value = 4;
+  metroUpdate();
+  // Player → defaults, clear all inputs
+  stopPlayback();
+  setPlayerMode('chords');
+  document.getElementById('player-bpm').value = 120;
+  document.getElementById('chord-prog').value = '';
+  document.getElementById('prog-beats').value = 4;
+  document.getElementById('prog-pattern').value = '';
+  document.getElementById('tab-input').value = '';
+  document.getElementById('tab-lick-name').value = '';
+  document.getElementById('tab-subdiv').value = '8';
+  closeImport();
+  document.getElementById('cs-shape').value = 'auto';
+  state.chordSetOn = false;
+  refreshChordSet();          // re-parse the now-empty chord box, hide shapes
+  renderFretboard();
+}
+
+// ── Chords in Key (diatonic) ──
+// When the Root dropdown changes, treat it as choosing the key's tonic so the
+// chord family follows along.
+function onRootChange() {
+  if (state.diatonic) state.keyRoot = document.getElementById('sel-root').value;
+  onSettingChange();
+}
+
+function updateDiatonicBtn() {
+  const btn = document.getElementById('diatonic-btn');
+  if (!btn) return;
+  btn.textContent = state.diatonic ? 'On' : 'Off';
+  btn.classList.toggle('btn-active', state.diatonic);
+}
+
+function toggleDiatonic() {
+  state.diatonic = !state.diatonic;
+  if (state.diatonic && state.root) state.keyRoot = state.root;
+  updateDiatonicBtn();
+  buildDiatonicChips();
+  renderFretboard();
+}
+
+function buildDiatonicChips() {
+  const wrap = document.getElementById('diatonic-chips');
+  const keyLbl = document.getElementById('diatonic-key');
+  const hint = document.getElementById('diatonic-hint');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!state.diatonic) { keyLbl.textContent = ''; hint.textContent = ''; return; }
+  if (!state.keyRoot) {
+    keyLbl.textContent = '';
+    hint.textContent = 'Pick a Root above to see its chord family.';
+    return;
+  }
+  const ki = NOTES.indexOf(state.keyRoot);
+  keyLbl.textContent = 'Key of ' + state.keyRoot + ' major';
+  hint.textContent = 'Tap a chord to show it on the fretboard.';
+  for (const d of DIATONIC_MAJOR) {
+    const noteName = NOTES[(ki + d.deg) % 12];
+    const chordName = noteName + DIATONIC_SUFFIX[d.type];
+    const isActive = state.view === 'chord' && state.root === noteName && state.chord === d.type;
+    const chip = document.createElement('div');
+    chip.className = 'chip keychip' + (isActive ? ' active' : '');
+    chip.innerHTML = `<span class="rn">${d.roman}</span><span class="cn">${chordName}</span>`;
+    chip.addEventListener('click', () => selectDiatonic(noteName, d.type));
+    wrap.appendChild(chip);
+  }
+}
+
+// ── Send to Player ──
+// Build a chord token from the current fretboard selection: Root + Name give
+// the chord; a selected Triad string-set wins over a selected CAGED shape;
+// with neither selected the shape is auto-picked.
+function currentChordToken() {
+  const root = state.root;
+  if (!root) return null;
+  const q = state.view === 'chord' ? state.chord : 'Major';
+  let shape = 'auto';
+  const set = state.triadGrps.size ? Math.min(...state.triadGrps) + 1 : null;
+  const caged = state.caged.size ? [...state.caged][0] : null;
+  if (!isBass()) {
+    if (set && caged) shape = caged + set;        // triad voiced inside the CAGED shape, e.g. E2
+    else if (set) shape = 't' + set;              // independent triad on that string-set
+    else if (caged) shape = caged;                // full CAGED shape
+  }
+  return chordToToken({ root, q, shape });
+}
+
+function updateSendPreview() {
+  const el = document.getElementById('send-preview');
+  const btn = document.getElementById('send-btn');
+  if (!el) return;
+  const tok = currentChordToken();
+  el.textContent = tok || '(pick a Root)';
+  if (btn) btn.disabled = !tok;
+}
+
+// Append the current chord to the Player's box without switching tabs, so you
+// can build up several chords. Doesn't force the board into shape view.
+function sendCurrentToPlayer() {
+  const tok = currentChordToken();
+  if (!tok) { alert('Pick a Root (and set Type to Chord) first.'); return; }
+  const inp = document.getElementById('chord-prog');
+  inp.value = (inp.value.trim() + ' ' + tok).trim();
+  refreshChordSet();
+  const btn = document.getElementById('send-btn');
+  if (btn) { const o = btn.textContent; btn.textContent = 'Added ✓'; setTimeout(() => { btn.textContent = o; }, 800); }
+}
+
+// Show one diatonic chord on the fretboard without disturbing the key tonic.
+function selectDiatonic(noteName, type) {
+  document.getElementById('sel-root').value = noteName;
+  document.getElementById('sel-type').value = 'chord';
+  onTypeChange();                                  // populate chord names, sets state to Major
+  document.getElementById('sel-name').value = type;
+  onSettingChange();                               // apply the chosen chord (keyRoot untouched)
+}
+
+// ── Chord Set: shares the Player's chord box ──
+// The progression typed in #chord-prog is the single source of chords. Each
+// chord can carry a CAGED shape suffix (e.g. F@E); the "Shapes" toggle draws
+// them on the fretboard. Shape suffixes and strum modifiers are ignored by the
+// progression player, so the same box both plays and displays.
+function progChords() {
+  const raw = (document.getElementById('chord-prog').value || '').trim();
+  const tokens = raw ? raw.split(/[\s,]+/).filter(Boolean) : [];
+  const chords = [];
+  tokens.forEach((tok, ti) => {
+    if (/^tab:/i.test(tok)) return;          // embedded licks aren't chords
+    const c = parseChordSetToken(tok);
+    if (c) { c.ti = ti; chords.push(c); }
+  });
+  return { tokens, chords };
+}
+
+// Re-parse the chord box → refresh chips and the fretboard.
+function refreshChordSet() {
+  state.chordSet = progChords().chords;
+  updateShapeBtn();
+  buildChordSetChips();
+  renderFretboard();
+}
+
+function updateShapeBtn() {
+  const btn = document.getElementById('chordset-btn');
+  if (btn) {
+    btn.textContent = state.chordSetOn ? 'On' : 'Off';
+    btn.classList.toggle('btn-active', state.chordSetOn);
+  }
+}
+
+function toggleChordSet() {
+  state.chordSetOn = !state.chordSetOn;
+  refreshChordSet();
+}
+
+function chordToToken(c) {
+  const sym = c.root + (QSUF[c.q] || '');
+  return (c.shape && c.shape !== 'auto') ? sym + '@' + c.shape : sym;
+}
+
+// Lenient parser: pull root, classify the quality (extensions map to a base
+// triad for shape purposes), and read an optional @shape suffix.
+function parseChordSetToken(tok) {
+  tok = (tok || '').trim();
+  if (!tok) return null;
+  let shape = 'auto';
+  const tm = tok.match(/@t([1-4])/i);                        // @t1..@t4 triad string-set
+  const cm = tok.match(/@([CAGEDcaged])([1-4])(?![0-9])/);   // @E2 shape + triad set
+  const sm = tok.match(/@([CAGEDcaged])(?![A-Za-z0-9])/);    // @shape, not @5 / @maj
+  if (tm) { shape = 't' + tm[1]; tok = tok.slice(0, tm.index) + tok.slice(tm.index + 3); }
+  else if (cm) { shape = cm[1].toUpperCase() + cm[2]; tok = tok.slice(0, cm.index) + tok.slice(cm.index + 3); }
+  else if (sm) { shape = sm[1].toUpperCase(); tok = tok.slice(0, sm.index) + tok.slice(sm.index + 2); }
+  const m = tok.match(/^([A-Ga-g][#b]?)(.*)$/);
+  if (!m) return null;
+  let rn = m[1].toUpperCase();
+  if (rn.length === 2 && rn[1] === 'B') rn = FLATS[rn] || rn;   // flat → sharp
+  if (NOTES.indexOf(rn) < 0) return null;
+  const ql = m[2].toLowerCase();
+  let q = 'Major';
+  if (/^(dim|°|o(?![a-z]))/.test(ql)) q = 'Dim';
+  else if (/^(aug|\+)/.test(ql)) q = 'Aug';
+  else if (/^sus2/.test(ql)) q = 'Sus2';
+  else if (/^sus/.test(ql)) q = 'Sus4';
+  else if (/^m(?!aj)/.test(ql)) q = 'Minor';
+  return { root: rn, q, shape };
+}
+
+// Builder: append a chord (with optional shape) to the chord box.
+function chordSetAdd() {
+  const tok = chordToToken({
+    root: document.getElementById('cs-root').value,
+    q: document.getElementById('cs-qual').value,
+    shape: document.getElementById('cs-shape').value
+  });
+  const inp = document.getElementById('chord-prog');
+  inp.value = (inp.value.trim() + ' ' + tok).trim();
+  state.chordSetOn = true;
+  refreshChordSet();
+}
+
+// Remove the chord's token from the chord box (other tokens are preserved).
+function chordSetRemove(i) {
+  const { tokens, chords } = progChords();
+  const c = chords[i];
+  if (!c) return;
+  tokens.splice(c.ti, 1);
+  document.getElementById('chord-prog').value = tokens.join(' ');
+  refreshChordSet();
+}
+
+function chordSetStrum(i) {
+  const res = chordSetEntryNotes(state.chordSet[i]);
+  if (!res) return;
+  const dnotes = res.notes.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+  playStrum(dnotes, 30);
+}
+
+// Notes (low-string-first [freq, si, fret]) for a chord token that names a
+// shape (CAGED letter or triad t1..t4). Returns null for plain chords or on
+// bass, so the caller falls back to the generic voicing.
+function shapeVoicingNotes(sym) {
+  if (isBass()) return null;
+  const c = parseChordSetToken(sym);
+  if (!c || !c.shape || c.shape === 'auto') return null;
+  const res = chordSetEntryNotes(c);
+  if (!res) return null;
+  return res.notes.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+}
+
+function buildChordSetChips() {
+  const wrap = document.getElementById('cs-chips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  state.chordSet.forEach((c, i) => {
+    const res = chordSetEntryNotes(c);
+    const shapeName = res ? res.shapeName : (c.shape && c.shape !== 'auto' ? c.shape : '?');
+    const col = CHORD_SET_COLORS[i % CHORD_SET_COLORS.length];
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.style.borderColor = col;
+    if (!res) chip.style.opacity = '0.5';
+    chip.innerHTML = `<span style="color:${col};font-weight:700">${c.root}${QSUF[c.q] || ''}</span> <span style="opacity:.7">(${shapeName})</span> <span class="cs-x" style="margin-left:4px;opacity:.6">✕</span>`;
+    chip.addEventListener('click', e => {
+      if (e.target.classList.contains('cs-x')) { e.stopPropagation(); chordSetRemove(i); }
+      else chordSetStrum(i);
+    });
+    wrap.appendChild(chip);
+  });
+}
+
 function buildChips() {
+  // Chord shapes use CAGED voicings (guitar-only); hide the shape controls for
+  // bass. The chord box itself still plays as a progression.
+  const csControls = document.getElementById('cs-controls');
+  if (csControls) csControls.style.display = isBass() ? 'none' : '';
+
   // CAGED
   const cagedContainer = document.getElementById('caged-chips');
   const cagedSection = document.getElementById('caged-section');
@@ -1746,6 +2288,7 @@ function buildChips() {
     });
     triadContainer.appendChild(chip);
   }
+  updateSendPreview();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1753,8 +2296,15 @@ function buildChips() {
 // ════════════════════════════════════════════════════════════════
 function init() {
   populateRootSelect();
+  const csRoot = document.getElementById('cs-root');
+  NOTES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; csRoot.appendChild(o); });
+  csRoot.value = 'C';
   onTypeChange();
   buildChips();
+  updateDiatonicBtn();
+  buildDiatonicChips();
+  refreshChordSet();
+  updateSendPreview();
   loadLicks();
   metroUpdate();
 
