@@ -766,17 +766,22 @@ function getTriadParts(fx, sy, circleR, fontSize) {
 }
 
 // Triads constrained to a CAGED shape: for each selected group (3 adjacent
-// strings) draw one box around the cage's notes that fall on those strings.
+// strings) draw a box around the cage's own notes on those strings — but only
+// when the shape actually contains a complete triad there. The box must wrap
+// all three strings (the shape can't mute one of them, e.g. C shape on D-A-E)
+// AND those notes must be three distinct tones (the shape can't double a tone
+// and drop another, e.g. G shape giving G-D-G). Otherwise draw nothing.
 function getCagedTriadBoxes(fx, sy, circleR) {
   const shapes = computeCagedShapes();
   if (!shapes.length) return '';
+  const gtr = INSTRUMENTS.guitar.notes.map(n => NOTES.indexOf(n));
   let svg = '';
   for (const { notes } of shapes) {
     for (const g of state.triadGrps) {
       const sel = notes.filter(p => p.si >= g && p.si <= g + 2);
-      // Require the complete triad: all three of the group's strings must exist
-      // in this cage shape, otherwise don't box a partial (2-note) triad.
-      if (sel.length < 3) continue;
+      if (sel.length < 3) continue;                                  // a string is muted in this shape
+      const distinct = new Set(sel.map(p => (gtr[p.si] + p.fret) % 12)).size;
+      if (distinct < 3) continue;                                    // not a complete triad in this shape
       const xs = sel.map(p => fx(p.fret));
       const ys = sel.map(p => sy(p.si));
       const pad = circleR + 1.5; // nest just inside the cage box (circleR + 4)
