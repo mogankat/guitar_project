@@ -38,7 +38,7 @@ html, body {
 #menu-toggle {
   position: fixed; top: 10px; right: 10px; z-index: 50;
   background: var(--panel-bg); border: 1px solid var(--border); color: var(--fg);
-  font-size: 20px; width: 36px; height: 36px; border-radius: 50%;
+  font-size: 13px; font-weight: 600; height: 32px; padding: 0 14px; border-radius: 16px;
   cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center;
   opacity: 0.6;
 }
@@ -60,9 +60,29 @@ html, body {
 #menu-panel.open { right: 0; }
 
 /* ── Menu sections ── */
-.menu-section { margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.menu-section { margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; position: relative; }
 .menu-section:last-child { border-bottom: none; }
-.menu-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+.menu-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; }
+
+/* ── Hover/tap help popups ── */
+/* The icon is a static hover target; its .tip is positioned against the
+   section (position:relative above) so it spans the section width and can
+   never run off the right edge of the menu panel. */
+.help {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--border);
+  color: #999; font-size: 10px; font-weight: 700; cursor: help;
+  text-transform: none; letter-spacing: 0;
+}
+.help > .tip {
+  display: none; position: absolute; top: 24px; left: 0; right: 0; z-index: 30;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 9px 11px; font-size: 11px; font-weight: 400; line-height: 1.5; color: var(--fg);
+  text-transform: none; letter-spacing: 0; white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+.help:hover > .tip, .help:focus > .tip { display: block; }
+.help .tip b { color: var(--accent); }
+.help .tip code { font-family: monospace; }
 
 /* ── Menu tabs ── */
 .menu-tabs { display: flex; gap: 6px; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; background: var(--panel-bg); padding-bottom: 4px; }
@@ -97,7 +117,12 @@ input[type="text"] { width: 100%; }
 .btn:active { opacity: 0.7; }
 .btn-active { background: #0066cc; color: white; border-color: #0066cc; }
 .btn-danger { background: #cc0000; color: white; border-color: #cc0000; }
+.btn-go { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn-sm { padding: 4px 8px; font-size: 11px; }
+
+/* Prominent, full-width Play control separated from the mode controls. */
+.play-bar { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.play-bar .btn { flex: 1; padding: 11px; font-size: 14px; font-weight: 700; }
 
 /* ── Interactive fretboard elements ── */
 .note-dot, .strum-box { cursor: pointer; }
@@ -122,8 +147,16 @@ input[type="text"] { width: 100%; }
 }
 .chip.active { background: var(--accent); color: white; border-color: var(--accent); }
 
+/* ── Diatonic "Chords in Key" chips (roman numeral over chord name) ── */
+.keychip { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.1; padding: 4px 9px; }
+.keychip .rn { font-size: 10px; font-weight: 700; opacity: 0.7; }
+.keychip .cn { font-size: 13px; font-weight: 700; }
+.keychip.active .rn { opacity: 0.9; }
+
 /* ── Lick list ── */
-#lick-list .lick-item { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+#lick-list .lick-item { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 10px; }
+#lick-list .lick-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lick-list .lick-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 #lick-list .lick-item button { flex-shrink: 0; }
 #lick-list pre {
   font-size: 10px; line-height: 1.3; color: #aaa; font-family: monospace;
@@ -149,7 +182,7 @@ body.light {
 <div id="app">
   <div id="fretboard-container"></div>
 </div>
-<button id="menu-toggle" aria-label="Open menu">☰</button>
+<button id="menu-toggle" aria-label="Open menu">Menu</button>
 
 <!-- Slide-out menu -->
 <div id="menu-overlay">
@@ -165,10 +198,10 @@ body.light {
 
     <!-- Fretboard Settings -->
     <div class="menu-section">
-      <h3>Fretboard</h3>
+      <h3>Fretboard <span class="help" tabindex="0">?<span class="tip">Pick a <b>Root</b> and a <b>Type</b> (Chord or Scale), then a <b>Name</b>, to light up the neck. <b>Sound</b> chooses the instrument voice (Acoustic, Electric, or Bass). <b>Labels</b> switches dots between note names and intervals.</span></span></h3>
       <div class="menu-row">
         <span class="menu-label">Root</span>
-        <select id="sel-root" onchange="onSettingChange()">
+        <select id="sel-root" onchange="onRootChange()">
           <option value="">—</option>
         </select>
       </div>
@@ -189,12 +222,25 @@ body.light {
         <button class="btn" id="sel-labels" onclick="toggleLabels()">Note Names</button>
       </div>
       <div class="menu-row">
-        <span class="menu-label">Instrument</span>
-        <select id="sel-instrument" onchange="onInstrumentChange()">
-          <option value="guitar">Guitar</option>
+        <span class="menu-label">Sound</span>
+        <select id="sel-sound" onchange="onSoundChange()">
+          <option value="acoustic">Acoustic</option>
+          <option value="electric">Electric</option>
           <option value="bass">Bass</option>
         </select>
       </div>
+    </div>
+
+    <!-- Chords in Key (diatonic) -->
+    <div class="menu-section" id="diatonic-section">
+      <h3>Chords in Key</h3>
+      <div class="menu-row">
+        <span class="menu-label">Show</span>
+        <button class="btn" id="diatonic-btn" onclick="toggleDiatonic()">Off</button>
+        <span id="diatonic-key" style="font-size:11px;color:#888;margin-left:auto"></span>
+      </div>
+      <div class="chip-group" id="diatonic-chips" style="margin-top:8px"></div>
+      <div id="diatonic-hint" style="font-size:10px;color:#888;line-height:1.5;margin-top:6px"></div>
     </div>
 
     <!-- CAGED -->
@@ -209,20 +255,41 @@ body.light {
       <div class="chip-group" id="triad-chips"></div>
     </div>
 
+    <!-- Send the current chord + shape to the Player -->
+    <div class="menu-section" id="send-section">
+      <h3>Send to Player</h3>
+      <div class="menu-row">
+        <button class="btn" id="send-btn" onclick="sendCurrentToPlayer()">Add to Player</button>
+        <span id="send-preview" style="margin-left:auto;font-size:12px;color:#aaa;font-family:monospace"></span>
+      </div>
+      <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
+        Adds the current <b>Root + Name</b> with the selected shape to the Player's chord box. A selected Triad wins over a CAGED shape; with neither, the shape is auto-picked. Build chords one at a time and add each — the tab doesn't switch.
+      </div>
+    </div>
+
     </div><!-- /pane-board -->
 
     <!-- ══ Tab 2: Tools ══ -->
     <div class="tab-pane" id="pane-tools">
 
-    <!-- Metronome -->
+    <!-- Metronome (single source of tempo for the whole app) -->
     <div class="menu-section">
-      <h3>Metronome</h3>
+      <h3>Metronome <span class="help" tabindex="0">?<span class="tip">Sets the tempo for everything. <b>BPM</b> is the speed and <b>Time</b> is the bar length — its top number is also how many beats each chord lasts in the Player. <b>Sound</b> plays a click or a looping drum groove.</span></span></h3>
       <div class="menu-row">
-        <button class="btn" id="metro-btn" onclick="toggleMetronome()">♩ Start</button>
+        <button class="btn" id="metro-btn" onclick="toggleMetronome()">Start</button>
+      </div>
+      <div class="menu-row">
+        <span class="menu-label">Sound</span>
+        <select id="metro-groove">
+          <option value="click">Click</option>
+          <option value="blues">Blues shuffle</option>
+          <option value="funk">Funk groove</option>
+          <option value="rock">Rock beat</option>
+        </select>
       </div>
       <div class="menu-row">
         <span class="menu-label">BPM</span>
-        <input id="metro-bpm" type="number" value="120" min="40" max="240" oninput="metroUpdate()">
+        <input id="metro-bpm" type="number" value="120" min="40" max="240" style="width:72px" oninput="metroUpdate()">
       </div>
       <div class="menu-row">
         <span class="menu-label">Time</span>
@@ -236,17 +303,13 @@ body.light {
         </select>
         <span id="metro-sig" style="font-size:11px;color:#888;margin-left:auto">4/4</span>
       </div>
-      <div style="font-size:10px;color:#888;line-height:1.5;margin-top:2px">
-        Tempo follows BPM (beats per minute). The time signature only sets the accent — beat 1 of each bar is emphasized.
-      </div>
     </div>
 
     <!-- Looper -->
     <div class="menu-section">
-      <h3>Looper</h3>
+      <h3>Looper <span class="help" tabindex="0">?<span class="tip">Record what you play on the fretboard, give it a name, and save it. Saved loops appear below — press <b>play</b> to loop one, press it again to stop. <b>edit</b> opens it in the Player's Tab.</span></span></h3>
       <div class="menu-row">
-        <button class="btn" id="rec-btn" onclick="toggleRecording()">⏺ Start Recording</button>
-        <button class="btn" onclick="stopLooper()">■ Stop playback</button>
+        <button class="btn" id="rec-btn" onclick="toggleRecording()">Start Recording</button>
       </div>
       <div id="save-area" style="display:none">
         <div class="menu-row">
@@ -259,69 +322,108 @@ body.light {
       <div id="lick-list"></div>
     </div>
 
-    <!-- Player (Chords / Tab) -->
+    <!-- Player (Chords / Tab / Melody) -->
     <div class="menu-section">
-      <h3>Player</h3>
+      <h3>Player <span class="help" tabindex="0">?<span class="tip"><b>Chords:</b> type names like <code>Am F C G</code>; add a shape with <code>@</code> (e.g. <code>F@E</code>); set a strum <b>Pattern</b> (<code>D</code>=down <code>U</code>=up <code>X</code>=mute <code>-</code>=rest) and modifiers <code>(arp)(pinch)(slide)(vib)</code>.<br><b>Tab:</b> type or paste ASCII tab; <b>Import</b> auto-detects a pasted chord sheet. Techniques: <code>h</code>hammer <code>p</code>pull <code>/</code>\\slide <code>~</code>vib <code>b</code>bend.<br><b>Melody:</b> generate riffs or a 12-bar blues to jam over.<br>Tempo (BPM/Beats) comes from the Metronome.</span></span></h3>
       <div class="menu-row" style="gap:6px">
         <button class="btn btn-sm player-mode btn-active" data-mode="chords" onclick="setPlayerMode('chords')">Chords</button>
         <button class="btn btn-sm player-mode" data-mode="tab" onclick="setPlayerMode('tab')">Tab</button>
-        <span class="menu-label" style="margin-left:auto">BPM</span>
-        <input id="player-bpm" type="number" value="120" min="40" max="240" style="width:52px">
-      </div>
-
-      <!-- Import / paste -->
-      <div class="menu-row" style="margin-top:6px">
-        <button class="btn btn-sm" onclick="toggleImport()">⬇ Import / paste</button>
-      </div>
-      <div id="import-area" style="display:none;margin-bottom:6px">
-        <textarea id="import-input" rows="5" placeholder="Paste an ASCII tab, or a chord sheet (chord names above the lyrics)…"></textarea>
-        <div class="menu-row" style="margin-top:6px">
-          <button class="btn btn-sm" onclick="smartImport(document.getElementById('import-input').value)">Load</button>
-          <button class="btn btn-sm" onclick="closeImport()">Cancel</button>
-          <span class="menu-label" style="margin-left:auto;font-size:10px">tab → Tab · chords → Chords</span>
-        </div>
+        <button class="btn btn-sm player-mode" data-mode="melody" onclick="setPlayerMode('melody')">Melody</button>
       </div>
 
       <!-- Chords mode -->
       <div id="player-chords">
         <div class="menu-row">
-          <input id="chord-prog" type="text" placeholder="Am F C G" onkeydown="if(event.key==='Enter')playerPlay()">
+          <input id="chord-prog" type="text" placeholder="Am F C G   or   C@A F@E G@G" oninput="refreshChordSet()" onkeydown="if(event.key==='Enter')playerPlay()">
         </div>
-        <div class="menu-row">
-          <span class="menu-label">Beats</span>
-          <input id="prog-beats" type="number" value="4" min="1" max="32" style="width:44px">
-          <span class="menu-label" style="margin-left:8px">Pattern</span>
+
+        <!-- Shape tools: collapsible builder + show-on-fretboard toggle (guitar only) -->
+        <div id="cs-controls">
+        <div class="menu-row" style="margin-top:6px;gap:6px">
+          <button class="btn btn-sm" id="cs-toggle" onclick="toggleShapeBuilder()">Add chord shape</button>
+          <span class="menu-label" style="margin-left:auto;min-width:0">Shapes</span>
+          <button class="btn btn-sm" id="chordset-btn" onclick="toggleChordSet()">Off</button>
+        </div>
+        <div id="cs-builder" style="display:none;margin-top:6px">
+          <div class="menu-row" style="gap:6px">
+            <select id="cs-root" style="width:auto;flex:0 0 auto"></select>
+            <select id="cs-qual" style="width:auto;flex:0 0 auto">
+              <option value="Major">Major</option>
+              <option value="Minor">Minor</option>
+              <option value="7">7</option>
+              <option value="Dim">Dim</option>
+              <option value="Sus2">Sus2</option>
+              <option value="Sus4">Sus4</option>
+              <option value="Aug">Aug</option>
+            </select>
+            <select id="cs-shape" style="width:auto;flex:0 0 auto">
+              <option value="auto">Auto</option>
+              <option value="C">C-shape</option>
+              <option value="A">A-shape</option>
+              <option value="G">G-shape</option>
+              <option value="E">E-shape</option>
+              <option value="D">D-shape</option>
+              <option value="t1">Triad 1·2·3</option>
+              <option value="t2">Triad 2·3·4</option>
+              <option value="t3">Triad 3·4·5</option>
+              <option value="t4">Triad 4·5·6</option>
+            </select>
+            <button class="btn btn-sm" onclick="chordSetAdd()">Add</button>
+          </div>
+        </div>
+        <div class="chip-group" id="cs-chips" style="margin-top:6px"></div>
+        </div><!-- /cs-controls -->
+
+        <div class="menu-row" style="margin-top:8px">
+          <span class="menu-label">Pattern</span>
           <input id="prog-pattern" type="text" placeholder="D D U D U" style="flex:1;min-width:0">
-        </div>
-        <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
-          <div>Pattern: D=down  U=up  X=mute  -=rest</div>
-          <div>Modifiers: Am<span style="font-family:monospace">(arp)</span> <span style="font-family:monospace">(arpd)</span> <span style="font-family:monospace">(pinch)</span> <span style="font-family:monospace">(slide)</span> <span style="font-family:monospace">(vib)</span></div>
-          <div>Embed a saved lick: <span style="font-family:monospace">tab:lickName</span></div>
         </div>
       </div>
 
-      <!-- Tab mode -->
+      <!-- Tab mode (also handles paste/import) -->
       <div id="player-tab" style="display:none">
-        <textarea id="tab-input" rows="7" placeholder="Linear (one note per token):&#10;B:1/6 G:5h7 D:5h7&#10;&#10;ASCII (paste standard tab):&#10;e|--0----5h7--|&#10;B|--1/6--------|&#10;G|--5h7--------|"></textarea>
-        <div class="menu-row" style="margin-top:8px">
-          <span class="menu-label">Step</span>
+        <textarea id="tab-input" rows="7" placeholder="Type or paste tab here, then press Play. Or paste a chord sheet and press Import.&#10;&#10;e|--0----5h7--|&#10;B|--1/6--------|&#10;G|--5h7--------|"></textarea>
+        <div class="menu-row" style="margin-top:8px;gap:6px">
+          <button class="btn btn-sm" onclick="smartImport(document.getElementById('tab-input').value)">Import</button>
+          <span class="menu-label" style="min-width:0">Step</span>
           <select id="tab-subdiv">
             <option value="4">1/4</option>
             <option value="8" selected>1/8</option>
             <option value="16">1/16</option>
           </select>
-          <input id="tab-lick-name" type="text" placeholder="Lick name to save" style="flex:1;min-width:0;margin-left:8px">
-          <button class="btn btn-sm" onclick="saveTabToLooper()">→ Looper</button>
         </div>
-        <div style="font-size:10px;color:#888;line-height:1.6;margin-top:4px">
-          <div>Strings: <span style="font-family:monospace">e B G D A E</span> &nbsp;(e=high, E=low)</div>
-          <div>Format: <span style="font-family:monospace">STRING:FRET[TECH[FRET2]]</span></div>
-          <div>Techs: <span style="font-family:monospace">h</span>=hammer &nbsp;<span style="font-family:monospace">p</span>=pull-off &nbsp;<span style="font-family:monospace">/</span>=slide up &nbsp;<span style="font-family:monospace">\</span>=slide dn &nbsp;<span style="font-family:monospace">~</span>=vib &nbsp;<span style="font-family:monospace">b</span>=bend</div>
+        <div class="menu-row" style="margin-top:6px;gap:6px">
+          <input id="tab-lick-name" type="text" placeholder="Lick name to save" style="flex:1;min-width:0">
+          <button class="btn btn-sm" onclick="saveTabToLooper()">Save to Looper</button>
         </div>
       </div>
 
-      <div class="menu-row" style="margin-top:8px">
-        <button class="btn" id="player-play-btn" onclick="playerPlay()">▶ Play</button>
+      <!-- Melody mode (Melody Maker) -->
+      <div id="player-melody" style="display:none">
+        <div class="menu-row" style="gap:6px">
+          <select id="mm-style" style="flex:1;min-width:0">
+            <option value="rock">Rock</option>
+            <option value="blues">Blues</option>
+            <option value="funk">Funk</option>
+          </select>
+          <select id="mm-bars" style="width:62px">
+            <option value="2" selected>2 bars</option>
+            <option value="4">4 bars</option>
+          </select>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px">
+            <input type="checkbox" id="mm-drums" checked> Drums
+          </label>
+        </div>
+        <div class="menu-row" style="gap:6px;margin-top:6px">
+          <button class="btn btn-sm" style="flex:1" onclick="melodyGenerate()">Generate</button>
+          <button class="btn btn-sm" style="flex:1" onclick="melody12Bar()">12-Bar Blues</button>
+          <button class="btn btn-sm" onclick="melodyToTabEditor()">To Tab</button>
+        </div>
+        <pre id="mm-tab" style="font-family:monospace;font-size:11px;line-height:1.4;white-space:pre;overflow-x:auto;margin:8px 0 0;padding:8px;border-radius:6px;background:rgba(127,127,127,0.12)">Pick a root + scale on the fretboard, then Generate.</pre>
+      </div>
+
+      <div class="menu-row play-bar">
+        <button class="btn btn-go" id="player-play-btn" onclick="playerPlay()">Play</button>
       </div>
     </div>
 
@@ -441,8 +543,69 @@ const PROG_CHORD_IVALS = {
 const state = {
   root: '', view: 'all', chord: 'Major', scale: 'Ionian',
   instrument: 'guitar', labelMode: 'note', dark: true,
-  caged: new Set(), triadGrps: new Set()
+  tone: 'acoustic',
+  caged: new Set(), triadGrps: new Set(),
+  diatonic: true, keyRoot: '',
+  chordSet: [], chordSetOn: false
 };
+
+// Distinct box colors for chords shown together in a Chord Set.
+const CHORD_SET_COLORS = ['#2980b9','#e67e22','#16a085','#8e44ad','#c0392b','#27ae60','#d35400','#7f8c8d'];
+// Chord-name suffix per quality (for labels and the text-list field).
+const QSUF = { Major:'', Minor:'m', '7':'7', Dim:'°', Sus2:'sus2', Sus4:'sus4', Aug:'aug' };
+// Flat spellings → the sharp names used internally.
+const FLATS = { CB:'B', DB:'C#', EB:'D#', FB:'E', GB:'F#', AB:'G#', BB:'A#' };
+
+// When the fretboard shows a Chord (not a scale), map its quality to the parent
+// scale whose diatonic chord family we display in "Chords in Key".
+const CHORD_TO_SCALE = {
+  Major: 'Ionian', Minor: 'Aeolian', '7': 'Mixolydian', Dim: 'Locrian',
+  Aug: 'Ionian', Sus2: 'Ionian', Sus4: 'Ionian', Add9: 'Ionian'
+};
+const DIATONIC_SUFFIX = { Major: '', Minor: 'm', Dim: '°', Aug: '+' };
+
+// The scale whose chord family "Chords in Key" should show, given the current
+// fretboard selection (a chosen scale wins; otherwise infer from the chord).
+function effectiveKeyScale() {
+  if (state.view === 'scale') return state.scale;
+  if (state.view === 'chord') return CHORD_TO_SCALE[state.chord] || 'Ionian';
+  return 'Ionian';
+}
+
+function keyScaleLabel(scaleKey) {
+  if (scaleKey === 'Ionian') return 'major';
+  if (scaleKey === 'Aeolian') return 'minor';
+  const o = SCALE_OPTIONS.find(x => x[0] === scaleKey);
+  return o ? o[1] : scaleKey;
+}
+
+// Build the diatonic triads of a scale by stacking thirds within the scale,
+// classifying each as Major/Minor/Dim/Aug. Heptatonic scales/modes give the
+// usual seven chords; pentatonic/blues fall back to their major/minor family.
+function diatonicTriads(scaleKey) {
+  let ivals = SCALE_INTERVALS[scaleKey];
+  if (!ivals || ivals.length !== 7) {
+    const minorish = (ivals || []).includes(3) && !(ivals || []).includes(4);
+    scaleKey = minorish ? 'Aeolian' : 'Ionian';
+    ivals = SCALE_INTERVALS[scaleKey];
+  }
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const r = ivals[i];
+    const t = ((ivals[(i + 2) % 7] - r) + 120) % 12;   // third above root
+    const f = ((ivals[(i + 4) % 7] - r) + 120) % 12;   // fifth above root
+    let type, roman = ROMAN[i];
+    if (t === 4 && f === 7) { type = 'Major'; }
+    else if (t === 3 && f === 7) { type = 'Minor'; roman = roman.toLowerCase(); }
+    else if (t === 3 && f === 6) { type = 'Dim'; roman = roman.toLowerCase() + '°'; }
+    else if (t === 4 && f === 8) { type = 'Aug'; roman = roman + '+'; }
+    else if (t <= 3) { type = 'Minor'; roman = roman.toLowerCase(); }   // unusual stacking
+    else { type = 'Major'; }
+    out.push({ deg: r, roman, type });
+  }
+  return out;
+}
 
 function isBass() { return state.instrument === 'bass'; }
 function getStrNotes() { return INSTRUMENTS[state.instrument].notes; }
@@ -461,27 +624,136 @@ function getCtx() {
   return audioCtx;
 }
 
-function playNote(freq, si, fr) {
-  if (si != null && fr != null) {
-    if (lickRec) lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr });
-    highlightPlayedNote(si, fr);
-  }
-  const ctx = getCtx(), sr = ctx.sampleRate;
+// Guitar voices. The string is modeled with Karplus-Strong, then shaped by a
+// pick filter, a body/amp filter chain, and an amplitude envelope so it reads
+// as a real guitar rather than a bright plucked-harpsichord.
+//   decay  – string energy loss per sample (higher = longer sustain)
+//   blend  – loop averaging (higher = darker/warmer string)
+//   pick   – excitation softness 0..1 (lower = mellower attack)
+//   lp     – body/amp low-pass cutoff (Hz);  peak/peakG/peakQ – body resonance
+//   drive  – overdrive amount (electric grit);  attack/release – amp envelope (s)
+const VOICES = {
+  acoustic: { decay: 0.9955, blend: 0.55, pick: 0.5, body: 3.0, gain: 0.55,
+              lp: 4500, lpQ: 0.6, peak: 230, peakG: 6, peakQ: 0.9, hp: 90,
+              drive: 0, attack: 0.004, release: 1.8 },
+  electric: { decay: 0.9975, blend: 0.50, pick: 0.42, body: 3.4, gain: 0.5,
+              lp: 3200, lpQ: 1.1, peak: 850, peakG: 5, peakQ: 1.3, hp: 120,
+              drive: 6, attack: 0.006, release: 2.6 },
+  // Rounder, deeper voice for bass: darker low-pass, more sustain, light grit.
+  bass:     { decay: 0.9985, blend: 0.50, pick: 0.38, body: 3.8, gain: 0.62,
+              lp: 1700, lpQ: 0.8, peak: 110, peakG: 5, peakQ: 1.0, hp: 30,
+              drive: 2, attack: 0.006, release: 3.2 }
+};
+
+function currentVoice() { return VOICES[state.tone] || VOICES.acoustic; }
+
+// Cache waveshaper curves by drive amount.
+const _wsCurves = {};
+function driveCurve(amount) {
+  if (_wsCurves[amount]) return _wsCurves[amount];
+  const n = 1024, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(x * amount); }
+  return (_wsCurves[amount] = c);
+}
+
+// Build the raw plucked-string buffer for a frequency, shaped by the voice.
+function makeKarplusBuffer(ctx, freq, v) {
+  const sr = ctx.sampleRate;
   const N = Math.max(2, Math.round(sr / freq));
-  const ns = Math.round(sr * 2.5);
+  const ns = Math.round(sr * (v.body || 3));
+  // Excitation: noise softened by a one-pole low-pass (pick hardness).
   const buf = new Float32Array(N);
-  for (let i = 0; i < N; i++) buf[i] = Math.random() * 2 - 1;
+  let last = 0;
+  for (let i = 0; i < N; i++) { const wn = Math.random() * 2 - 1; last += v.pick * (wn - last); buf[i] = last; }
   const ab = ctx.createBuffer(1, ns, sr);
   const d = ab.getChannelData(0);
-  const decay = freq < 300 ? 0.998 : 0.996;
+  const decay = v.decay, blend = v.blend;
   for (let i = 0; i < ns; i++) {
     const j = i % N;
     d[i] = buf[j];
-    buf[j] = decay * 0.5 * (buf[j] + buf[(i + 1) % N]);
+    buf[j] = decay * ((1 - blend) * buf[j] + blend * buf[(i + 1) % N]);
   }
-  for (let i = 0; i < ns; i++) d[i] = Math.tanh(d[i] * 1.5) * 0.65;
+  return ab;
+}
+
+// Pluck a note through the full voice chain. `when` null = play immediately.
+function pluck(freq, when, vel) {
+  const ctx = getCtx(), v = currentVoice();
+  const t0 = (when == null) ? ctx.currentTime : when;
   const src = ctx.createBufferSource();
-  src.buffer = ab; src.connect(ctx.destination); src.start();
+  src.buffer = makeKarplusBuffer(ctx, freq, v);
+  let node = src;
+  if (v.hp) { const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = v.hp; node.connect(hp); node = hp; }
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = v.lp; lp.Q.value = v.lpQ; node.connect(lp); node = lp;
+  if (v.peak) { const pk = ctx.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = v.peak; pk.gain.value = v.peakG; pk.Q.value = v.peakQ; node.connect(pk); node = pk; }
+  if (v.drive) { const ws = ctx.createWaveShaper(); ws.curve = driveCurve(v.drive); ws.oversample = '2x'; node.connect(ws); node = ws; }
+  const amp = ctx.createGain();
+  const peakG = Math.max(0.0001, (vel == null ? 1 : vel) * v.gain);
+  amp.gain.setValueAtTime(0.0001, t0);
+  amp.gain.exponentialRampToValueAtTime(peakG, t0 + v.attack);
+  amp.gain.exponentialRampToValueAtTime(0.0008, t0 + v.release);
+  node.connect(amp); amp.connect(ctx.destination);
+  src.start(t0); src.stop(t0 + v.release + 0.1);
+}
+
+function playNote(freq, si, fr) {
+  if (si != null && fr != null) {
+    if (lickRec) lickNotes.push({ f: freq, t: Date.now() - lickT0, s: si, fr: fr, chord: progRunning });
+    highlightPlayedNote(si, fr);
+  }
+  pluck(freq, null, 1);
+}
+
+// Schedule a plucked note to sound at audio-clock time `when`, at gain `vel`.
+function playNoteAt(freq, when, vel) { pluck(freq, when, vel); }
+
+// ── Synthesized drum kit (kick / snare / hi-hat), all scheduled at `when` ──
+function drumKick(when, vel) {
+  const ctx = getCtx();
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(150, when);
+  o.frequency.exponentialRampToValueAtTime(48, when + 0.12);
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(0.9 * vel, when + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(when); o.stop(when + 0.22);
+}
+
+function drumSnare(when, vel) {
+  const ctx = getCtx(), sr = ctx.sampleRate, dur = 0.2;
+  const ab = ctx.createBuffer(1, Math.round(sr * dur), sr);
+  const d = ab.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const n = ctx.createBufferSource(); n.buffer = ab;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.7 * vel, when);
+  ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.16);
+  n.connect(hp); hp.connect(ng); ng.connect(ctx.destination);
+  n.start(when); n.stop(when + dur);
+  const o = ctx.createOscillator(), og = ctx.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(185, when);
+  og.gain.setValueAtTime(0.4 * vel, when);
+  og.gain.exponentialRampToValueAtTime(0.0001, when + 0.1);
+  o.connect(og); og.connect(ctx.destination);
+  o.start(when); o.stop(when + 0.12);
+}
+
+function drumHat(when, vel, open) {
+  const ctx = getCtx(), sr = ctx.sampleRate, dur = open ? 0.18 : 0.045;
+  const ab = ctx.createBuffer(1, Math.round(sr * dur), sr);
+  const d = ab.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const n = ctx.createBufferSource(); n.buffer = ab;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(0.3 * vel, when + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  n.connect(hp); hp.connect(g); g.connect(ctx.destination);
+  n.start(when); n.stop(when + dur);
 }
 
 function playStrum(notes, delay) {
@@ -590,17 +862,28 @@ function renderFretboard() {
     svg += `<text x="${cx}" y="${cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${nc.display}</text>`;
   }
 
+  // Chord Set takes over the board: when active, the single-chord pattern,
+  // CAGED, and triads are suppressed so only the chosen shapes are shown.
+  const csActive = chordSetActive();
+
   // CAGED boxes
-  const cagedParts = getCagedParts(fx, sy, circleR, fontSize);
+  const cagedParts = csActive ? '' : getCagedParts(fx, sy, circleR, fontSize);
   svg += cagedParts;
 
   // Triad boxes
-  const triadParts = getTriadParts(fx, sy, circleR, fontSize);
+  const triadParts = csActive ? '' : getTriadParts(fx, sy, circleR, fontSize);
   svg += triadParts;
 
-  // Info label (inside SVG, top-left within the padding zone)
-  const infoText = getInfoText();
-  svg += `<text x="${padL}" y="${14}" font-family="Arial" font-size="10" fill="${dark ? '#666' : '#aaa'}" pointer-events="none">${infoText}</text>`;
+  // Chord Set boxes (multiple chords as playable shapes, drawn at once)
+  svg += getChordSetParts(fx, sy, circleR, fontSize);
+
+  // Source badge (top-left): shows whether the Player or the Fretboard tab is
+  // currently driving the board, then the details of what's shown.
+  const info = getInfoText();
+  const srcColor = info.src === 'PLAYER' ? '#2980b9' : (dark ? '#7a8a99' : '#999');
+  svg += `<text x="${padL}" y="${14}" font-family="Arial" font-size="10" pointer-events="none">`
+    + `<tspan fill="${srcColor}" font-weight="bold">${info.src}</tspan>`
+    + `<tspan fill="${dark ? '#666' : '#aaa'}">  ${info.text}</tspan></text>`;
 
   svg += '</svg>';
   container.innerHTML = svg;
@@ -608,6 +891,9 @@ function renderFretboard() {
 }
 
 function getNoteCircles() {
+  // Chord Set mode draws its own shapes; hide the normal note pattern.
+  if (chordSetActive()) return [];
+
   const rootIdx = NOTES.indexOf(state.root);
   const sFreqs = getStrFreqs();
   const ns = nStrings();
@@ -795,53 +1081,197 @@ function getCagedTriadBoxes(fx, sy, circleR) {
 // ── CAGED logic ──
 // Compute the notes of each selected CAGED shape (best chord-tone near each
 // pattern position). Returns [{ shapeName, notes: [{si, fret, color, display, freq}] }].
+// Compute the notes of one CAGED shape for a given root + chord quality, on
+// guitar. Picks the best chord tone near each pattern position. Returns
+// [{ si, fret, color, display, freq, isRoot }] or null if it won't fit.
+function computeShapeNotes(rootIdx, chordName, shapeName) {
+  if (rootIdx < 0) return null;
+  const shape = CAGED_SHAPES[shapeName];
+  if (!shape) return null;
+  const chordDegs = CHORD_DEGREES[chordName] || CHORD_DEGREES.Major;
+  const sFreqs = INSTRUMENTS.guitar.freqs;
+  const sNotes = INSTRUMENTS.guitar.notes;
+  const openNi = NOTES.indexOf(sNotes[shape.root_string]);
+  let baseFret = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
+  if (baseFret < 0) baseFret += 12;
+  if (baseFret >= N_FRETS) return null;
+
+  const notes = [];
+  for (let si = 0; si < shape.pattern.length; si++) {
+    const offset = shape.pattern[si];
+    if (offset === -1) continue;
+    const expFret = baseFret + offset;
+    if (expFret >= N_FRETS) continue;
+    const openSn = NOTES.indexOf(sNotes[si]);
+    let bestFret = null, bestLabel = null, bestDist = 999;
+    for (const interval in chordDegs) {
+      const label = chordDegs[interval];
+      const target = (rootIdx + parseInt(interval)) % 12;
+      const basePos = (target - openSn + 120) % 12;
+      for (let oct = -1; oct < 3; oct++) {
+        const f = basePos + oct * 12;
+        if (f >= 0 && f < N_FRETS) {
+          const d = Math.abs(f - expFret);
+          if (d < bestDist) { bestDist = d; bestFret = f; bestLabel = label; }
+        }
+      }
+    }
+    if (bestFret === null || bestDist > 3) continue;
+    const ni = (NOTES.indexOf(sNotes[si]) + bestFret) % 12;
+    const color = INTERVAL_COLORS[bestLabel] || '#888';
+    const display = state.labelMode === 'note' ? NOTES[ni] : bestLabel;
+    const freq = Math.round(sFreqs[si] * Math.pow(2, bestFret / 12) * 10000) / 10000;
+    notes.push({ si, fret: bestFret, color, display, freq, isRoot: bestLabel === 'R' });
+  }
+  return notes.length ? notes : null;
+}
+
+// Pick the lowest playable CAGED shape for a root + quality (open/low first).
+function autoShapeFor(rootIdx, chordName) {
+  let best = null, bestBase = 99;
+  for (const s of ['E', 'A', 'G', 'C', 'D']) {
+    const shape = CAGED_SHAPES[s];
+    const openNi = NOTES.indexOf(INSTRUMENTS.guitar.notes[shape.root_string]);
+    let base = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
+    if (base < 0) base += 12;
+    if (base >= N_FRETS) continue;
+    if (computeShapeNotes(rootIdx, chordName, s) && base < bestBase) { bestBase = base; best = s; }
+  }
+  return best;
+}
+
 function computeCagedShapes() {
   if (isBass() || !state.caged.size) return [];
   const rootIdx = NOTES.indexOf(state.root);
   if (rootIdx < 0) return [];
-  const chordDegs = CHORD_DEGREES[state.chord] || CHORD_DEGREES.Major;
-  const sFreqs = INSTRUMENTS.guitar.freqs;
-  const sNotes = INSTRUMENTS.guitar.notes;
   const out = [];
-
   for (const shapeName of state.caged) {
-    const shape = CAGED_SHAPES[shapeName];
-    if (!shape) continue;
-    const openNi = NOTES.indexOf(sNotes[shape.root_string]);
-    let baseFret = (rootIdx - openNi) % 12 - shape.root_fret_in_pattern;
-    if (baseFret < 0) baseFret += 12;
-    if (baseFret >= N_FRETS) continue;
-
-    const notes = [];
-    for (let si = 0; si < shape.pattern.length; si++) {
-      const offset = shape.pattern[si];
-      if (offset === -1) continue;
-      const expFret = baseFret + offset;
-      if (expFret >= N_FRETS) continue;
-      const openSn = NOTES.indexOf(sNotes[si]);
-      let bestFret = null, bestLabel = null, bestDist = 999;
-      for (const interval in chordDegs) {
-        const label = chordDegs[interval];
-        const target = (rootIdx + parseInt(interval)) % 12;
-        const basePos = (target - openSn + 120) % 12;
-        for (let oct = -1; oct < 3; oct++) {
-          const f = basePos + oct * 12;
-          if (f >= 0 && f < N_FRETS) {
-            const d = Math.abs(f - expFret);
-            if (d < bestDist) { bestDist = d; bestFret = f; bestLabel = label; }
-          }
-        }
-      }
-      if (bestFret === null || bestDist > 3) continue;
-      const ni = NOTES.indexOf(noteAt(si, bestFret));
-      const color = INTERVAL_COLORS[bestLabel] || '#888';
-      const display = state.labelMode === 'note' ? NOTES[ni] : bestLabel;
-      const freq = Math.round(sFreqs[si] * Math.pow(2, bestFret / 12) * 10000) / 10000;
-      notes.push({ si, fret: bestFret, color, display, freq });
-    }
-    if (notes.length) out.push({ shapeName, notes });
+    const notes = computeShapeNotes(rootIdx, state.chord, shapeName);
+    if (notes) out.push({ shapeName, notes });
   }
   return out;
+}
+
+// ── Chord Set: several chords shown at once as playable shape boxes ──
+function chordSetActive() {
+  return !isBass() && state.chordSetOn && state.chordSet.length > 0;
+}
+
+// Lowest playable triad voicing (root, 3rd, 5th) on a 3-string set. g is the
+// top string index of the set: 0 = strings 1-2-3 … 3 = strings 4-5-6.
+function computeTriadVoicing(rootIdx, chordName, g, target) {
+  if (g < 0 || g + 2 >= 6) return null;
+  const deg = CHORD_DEGREES[chordName] || CHORD_DEGREES.Major;
+  const sFreqs = INSTRUMENTS.guitar.freqs, sNotes = INSTRUMENTS.guitar.notes;
+  const tonePc = {};
+  for (const iv in deg) tonePc[(rootIdx + parseInt(iv)) % 12] = deg[iv];
+  const need = new Set(Object.values(deg));
+  const cand = [g, g + 1, g + 2].map(si => {
+    const open = NOTES.indexOf(sNotes[si]);
+    const arr = [];
+    for (let f = 0; f < N_FRETS; f++) { const pc = (open + f) % 12; if (tonePc[pc] !== undefined) arr.push({ si, fret: f, label: tonePc[pc] }); }
+    return arr;
+  });
+  let best = null;
+  for (const a of cand[0]) for (const b of cand[1]) for (const c of cand[2]) {
+    const labels = new Set([a.label, b.label, c.label]);
+    if (labels.size < need.size) continue;                 // need every chord tone
+    const frets = [a.fret, b.fret, c.fret];
+    if (Math.max(...frets) - Math.min(...frets) > 4) continue;
+    const minF = Math.min(...frets);
+    // With a target fret, pick the voicing nearest it; otherwise the lowest.
+    const score = (target != null) ? Math.abs(minF - target) : minF;
+    if (!best || score < best.score) best = { score, minF, voicing: [a, b, c] };
+  }
+  if (!best) return null;
+  return best.voicing.map(p => ({
+    si: p.si, fret: p.fret, isRoot: p.label === 'R',
+    display: state.labelMode === 'note' ? NOTES[(NOTES.indexOf(sNotes[p.si]) + p.fret) % 12] : p.label,
+    freq: Math.round(sFreqs[p.si] * Math.pow(2, p.fret / 12) * 10000) / 10000
+  }));
+}
+
+// Base fret of a CAGED shape for a given root (where the shape pattern sits).
+function shapeBaseFret(rootIdx, shapeName) {
+  const sh = CAGED_SHAPES[shapeName];
+  const open = NOTES.indexOf(INSTRUMENTS.guitar.notes[sh.root_string]);
+  let b = (rootIdx - open) % 12 - sh.root_fret_in_pattern;
+  if (b < 0) b += 12;
+  return b;
+}
+
+// Resolve a chord-set entry to its shape name and notes. Shape may be:
+//   'auto' / a CAGED letter (full barre shape),
+//   't1'..'t4' (a triad on a string-set, lowest position),
+//   '<CAGED><1-4>' e.g. 'E2' (that string-set's triad voiced inside the shape).
+function chordSetEntryNotes(c) {
+  const rootIdx = NOTES.indexOf(c.root);
+  if (rootIdx < 0) return null;
+  // Shape-constrained triad: the 3 strings of the set, voiced in the shape's
+  // region (e.g. G@E2 → the E-shape's B·G·D notes at frets 3·4·5).
+  if (c.shape && /^[CAGED][1-4]$/.test(c.shape)) {
+    const letter = c.shape[0], g = parseInt(c.shape[1]) - 1;
+    const notes = computeTriadVoicing(rootIdx, c.q, g, shapeBaseFret(rootIdx, letter));
+    return notes ? { shapeName: letter + ' tri ' + (g + 1) + '·' + (g + 2) + '·' + (g + 3), notes } : null;
+  }
+  if (c.shape && /^t[1-4]$/.test(c.shape)) {
+    const g = parseInt(c.shape[1]) - 1;
+    const notes = computeTriadVoicing(rootIdx, c.q, g);
+    return notes ? { shapeName: 'str ' + (g + 1) + '·' + (g + 2) + '·' + (g + 3), notes } : null;
+  }
+  const shapeName = (c.shape && c.shape !== 'auto') ? c.shape : autoShapeFor(rootIdx, c.q);
+  if (!shapeName) return null;
+  const notes = computeShapeNotes(rootIdx, c.q, shapeName);
+  return notes ? { shapeName, notes } : null;
+}
+
+function getChordSetParts(fx, sy, circleR, fontSize) {
+  if (!chordSetActive()) return '';
+
+  // Resolve every chord's shape first so we can find positions shared between
+  // chords (same string+fret) and call them out — easy to see what stays put
+  // across a change.
+  const drawn = [];
+  state.chordSet.forEach((c, idx) => {
+    const res = chordSetEntryNotes(c);
+    if (res) drawn.push({ c, col: CHORD_SET_COLORS[idx % CHORD_SET_COLORS.length], notes: res.notes, shapeName: res.shapeName });
+  });
+  const posCount = {};
+  drawn.forEach(d => d.notes.forEach(p => { const k = p.si + ',' + p.fret; posCount[k] = (posCount[k] || 0) + 1; }));
+
+  let svg = '';
+  // Boxes, labels, and the notes unique to each chord.
+  for (const d of drawn) {
+    const parts = d.notes.map(p => ({ ...p, cx: fx(p.fret), cy: sy(p.si) }));
+    const xs = parts.map(p => p.cx), ys = parts.map(p => p.cy);
+    const pad = circleR + 5;
+    const dnotes = parts.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+    svg += `<rect x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + pad * 2}" height="${Math.max(...ys) - Math.min(...ys) + pad * 2}" rx="6" stroke="${d.col}" stroke-width="2.5" fill="transparent" class="strum-box" data-notes='${JSON.stringify(dnotes)}'/>`;
+    const label = d.c.root + (QSUF[d.c.q] || '') + ' (' + d.shapeName + ')';
+    svg += `<text x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad - 3}" font-family="Arial" font-size="${Math.max(8, circleR * 0.6)}" font-weight="bold" fill="${d.col}">${label}</text>`;
+    for (const p of parts) {
+      if (posCount[p.si + ',' + p.fret] >= 2) continue;   // shared notes drawn on top
+      svg += `<circle cx="${p.cx}" cy="${p.cy}" r="${circleR}" fill="${d.col}" stroke="${p.isRoot ? '#fff' : d.col}" stroke-width="${p.isRoot ? 2.5 : 1}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
+      svg += `<text x="${p.cx}" y="${p.cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="white" pointer-events="none">${p.display}</text>`;
+    }
+  }
+
+  // Shared notes: one dot in a stand-out colour with a halo ring, so you can
+  // see which notes are common to two or more of the chords.
+  const sharedFill = state.dark ? '#f1c40f' : '#e67e22';
+  const haloColor = state.dark ? '#fff' : '#222';
+  const seen = {};
+  for (const d of drawn) for (const p of d.notes) {
+    const k = p.si + ',' + p.fret;
+    if (posCount[k] < 2 || seen[k]) continue;
+    seen[k] = true;
+    const cx = fx(p.fret), cy = sy(p.si);
+    const ni = (NOTES.indexOf(INSTRUMENTS.guitar.notes[p.si]) + p.fret) % 12;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${circleR + 2.5}" fill="none" stroke="${haloColor}" stroke-width="1.5"/>`;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${circleR}" fill="${sharedFill}" stroke="${sharedFill}" data-freq="${p.freq}" data-s="${p.si}" data-f="${p.fret}" class="note-dot"/>`;
+    svg += `<text x="${cx}" y="${cy + fontSize * 0.35}" text-anchor="middle" font-family="Arial" font-size="${fontSize}" font-weight="bold" fill="#222" pointer-events="none">${state.labelMode === 'note' ? NOTES[ni] : p.display}</text>`;
+  }
+  return svg;
 }
 
 function getCagedParts(fx, sy, circleR, fontSize) {
@@ -917,17 +1347,24 @@ function metroTick() {
 
 function toggleMetronome() {
   const btn = document.getElementById('metro-btn');
-  if (metro.running) {
-    metro.running = false; clearTimeout(metro.timeout);
-    btn.textContent = '♩ Start'; btn.className = 'btn';
-  } else {
+  // Any running transport (click or drum groove) stops on a second press.
+  if (metro.running || transport.running) { clearTransport(); return; }
+  metro.bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+  metro.beats = parseInt(document.getElementById('metro-top').value) || 4;
+  metro.denom = parseInt(document.getElementById('metro-bot').value) || 4;
+  const grooveEl = document.getElementById('metro-groove');
+  const groove = grooveEl ? grooveEl.value : 'click';
+  if (groove === 'click') {
     metro.running = true; metro.tick = 0;
-    metro.bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
-    metro.beats = parseInt(document.getElementById('metro-top').value) || 4;
-    metro.denom = parseInt(document.getElementById('metro-bot').value) || 4;
     metroTick();
-    btn.textContent = '■ Stop'; btn.className = 'btn btn-active';
+  } else {
+    const pat = DRUM_PATTERNS[groove] || DRUM_PATTERNS.rock;
+    startTransport({
+      owner: 'metro', bpm: metro.bpm, style: groove, drumsOn: true,
+      melodyOn: false, melody: [], spb: pat.spb, loopSteps: pat.spb * 4
+    });
   }
+  btn.textContent = 'Stop'; btn.className = 'btn btn-active';
 }
 
 function metroUpdate() {
@@ -988,7 +1425,12 @@ function chordToNotes(chord) {
       }
     }
   }
-  return notes;
+  // Keep the chord root in the bass: drop the lowest strings until the lowest
+  // sounding note is the root. This removes e.g. the low E from an open Am
+  // (which would otherwise sound an E in the bass) so chords/arpeggios voice
+  // from their root upward, like a guitarist would play them.
+  const firstRoot = notes.findIndex(n => (NOTES.indexOf(sNotes[n[1]]) + n[2]) % 12 === chord.root);
+  return firstRoot > 0 ? notes.slice(firstRoot) : notes;
 }
 
 // notes are ordered low-string-first (downstroke order)
@@ -1048,13 +1490,13 @@ function playProgression() {
   const btn = document.getElementById('player-play-btn');
   if (progRunning) {
     progRunning = false; clearTimeout(progTimeout);
-    btn.textContent = '▶ Play'; btn.className = 'btn';
+    btn.textContent = 'Play'; btn.className = 'btn btn-go';
     return;
   }
   progRunning = true;
-  btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
-  const bpm = parseInt(document.getElementById('player-bpm').value) || 120;
-  const bpc = parseInt(document.getElementById('prog-beats').value) || 4;
+  btn.textContent = 'Stop'; btn.className = 'btn btn-danger';
+  const bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+  const bpc = parseInt(document.getElementById('metro-top').value) || 4;  // beats per chord = Time signature top
   const mspc = Math.round(60000 / bpm * bpc);
   const pattern = parseStrumPattern(patternStr);
   let idx = 0;
@@ -1074,7 +1516,10 @@ function playProgression() {
     } else {
       const c = parseChord(sym);
       if (c) {
-        const notes = chordToNotes(c);
+        // If the token carries a shape (e.g. C@A or C@t2), play that exact
+        // voicing — otherwise build a generic voicing. This makes the player
+        // match what the chip/fretboard shows for shaped chords.
+        const notes = shapeVoicingNotes(sym) || chordToNotes(c);
         const mods = c.mods || {};
         if (pattern) {
           const strokeMs = mspc / pattern.length;
@@ -1238,7 +1683,7 @@ function playTechNote(note, delayMs) {
 }
 
 function tabStepMs() {
-  const bpm = parseInt(document.getElementById('player-bpm').value) || 120;
+  const bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
   const subdiv = parseInt(document.getElementById('tab-subdiv').value) || 8;
   return Math.round(60000 / bpm * 4 / subdiv);
 }
@@ -1263,7 +1708,7 @@ function playTabWriter() {
   if (tabRunning) {
     tabRunning = false;
     tabTimeouts.forEach(clearTimeout); tabTimeouts = [];
-    btn.textContent = '▶ Play'; btn.className = 'btn';
+    btn.textContent = 'Play'; btn.className = 'btn btn-go';
     return;
   }
   const text = document.getElementById('tab-input').value.trim();
@@ -1272,7 +1717,7 @@ function playTabWriter() {
   if (!events.length) return;
   const stepMs = tabStepMs();
   tabRunning = true;
-  btn.textContent = '⏹ Stop'; btn.className = 'btn btn-danger';
+  btn.textContent = 'Stop'; btn.className = 'btn btn-danger';
   for (const ev of events) {
     const base = ev.pos * stepMs + (ev._extraDelay || 0);
     for (const note of ev.notes) playTechNote(note, base);
@@ -1280,7 +1725,7 @@ function playTabWriter() {
   const totalMs = (Math.max(...events.map(e => e.pos)) + 1) * stepMs + 600;
   tabTimeouts.push(setTimeout(() => {
     tabRunning = false;
-    btn.textContent = '▶ Play'; btn.className = 'btn';
+    btn.textContent = 'Play'; btn.className = 'btn btn-go';
   }, totalMs));
 }
 
@@ -1296,7 +1741,7 @@ function saveTabToLooper() {
     notes: eventsToLickNotes(events, stepMs),
     src: text,                                                         // keep the exact tab text
     subdiv: parseInt(document.getElementById('tab-subdiv').value) || 8,
-    bpm: parseInt(document.getElementById('player-bpm').value) || 120
+    bpm: parseInt(document.getElementById('metro-bpm').value) || 120
   };
   storeLicks(); renderLickList();
   document.getElementById('tab-lick-name').value = '';
@@ -1313,7 +1758,7 @@ function editLick(name) {
   document.getElementById('tab-input').value = text;
   document.getElementById('tab-lick-name').value = name;
   if (lick.subdiv) document.getElementById('tab-subdiv').value = String(lick.subdiv);
-  if (lick.bpm) document.getElementById('player-bpm').value = lick.bpm;
+  if (lick.bpm) document.getElementById('metro-bpm').value = lick.bpm;
   const ta = document.getElementById('tab-input');
   ta.scrollIntoView({ block: 'center' });
   ta.focus();
@@ -1335,7 +1780,7 @@ function toggleRecording() {
   const sa = document.getElementById('save-area');
   if (lickRec) {
     lickRec = false;
-    btn.textContent = '⏺ Start Recording'; btn.className = 'btn';
+    btn.textContent = 'Start Recording'; btn.className = 'btn';
     if (lickNotes.length) {
       sa.style.display = 'block';
       // Auto-suggest name based on notes played
@@ -1345,7 +1790,7 @@ function toggleRecording() {
     }
   } else {
     lickRec = true; lickT0 = Date.now(); lickNotes = [];
-    btn.textContent = '⏹ Stop Recording'; btn.className = 'btn btn-danger';
+    btn.textContent = 'Stop Recording'; btn.className = 'btn btn-danger';
     sa.style.display = 'none';
   }
 }
@@ -1425,12 +1870,12 @@ function stopLooper() {
   renderLickList();
 }
 
-// Copy a saved loop's tab to the clipboard, with a brief ✓ confirmation.
+// Copy a saved loop's tab to the clipboard, with a brief confirmation.
 function copyLickTab(name, btn) {
   const lick = savedLicks[name]; if (!lick) return;
   const text = lick.src || genTab(lick);
   if (!text) { alert('No tab to copy for this loop.'); return; }
-  const flash = () => { if (!btn) return; const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = o; }, 900); };
+  const flash = () => { if (!btn) return; const o = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = o; }, 900); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(flash).catch(() => { fallbackCopy(text); flash(); });
   } else { fallbackCopy(text); flash(); }
@@ -1469,6 +1914,7 @@ function genTab(lick) {
     const prev = cols[ci - 1], cur = cols[ci];
     if (prev.length !== 1 || cur.length !== 1) continue;
     const pn = prev[0], cn = cur[0];
+    if (pn.chord || cn.chord) continue;   // chord/arpeggio notes aren't legato
     if (pn.s !== cn.s || pn.fr === cn.fr) continue;
     const dt = cn.t - pn.t;
     const tech = dt < 80 ? (pn.fr < cn.fr ? '/' : '\\') : (pn.fr < cn.fr ? 'h' : 'p');
@@ -1510,17 +1956,19 @@ function renderLickList() {
     const tabEsc = rawTab ? rawTab.replace(/&/g, '&amp;').replace(/</g, '&lt;') : '';
     const tabHtml = rawTab ? `<pre id="lt${i}" style="display:none">${tabEsc}</pre>` : '';
     const tabBtn = rawTab ? `<button class="btn btn-sm" onclick="document.getElementById('lt${i}').style.display=document.getElementById('lt${i}').style.display==='none'?'block':'none'">tab</button>` : '';
-    const editBtn = `<button class="btn btn-sm" title="Edit" onclick="editLick('${esc}')">✎</button>`;
+    const editBtn = `<button class="btn btn-sm" title="Edit" onclick="editLick('${esc}')">edit</button>`;
     const copyBtn = rawTab ? `<button class="btn btn-sm" title="Copy tab" onclick="copyLickTab('${esc}', this)">copy</button>` : '';
     const isLooping = loopingLick === name;
-    const playBtn = `<button class="btn btn-sm${isLooping ? ' btn-active' : ''}" onclick="playLick('${esc}',true)" title="Play (loop)">▶</button>`;
+    const playBtn = `<button class="btn btn-sm${isLooping ? ' btn-active' : ''}" onclick="playLick('${esc}',true)" title="Play (loop)">play</button>`;
     return `<div class="lick-item">
-      ${playBtn}
-      ${tabBtn}
-      ${copyBtn}
-      ${editBtn}
-      <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
-      <button class="btn btn-sm" style="color:#e05050" onclick="deleteLick('${esc}')">✕</button>
+      <div class="lick-name" title="${esc}">${name}</div>
+      <div class="lick-actions">
+        ${playBtn}
+        ${tabBtn}
+        ${copyBtn}
+        ${editBtn}
+        <button class="btn btn-sm" style="color:#e05050;margin-left:auto" onclick="deleteLick('${esc}')">delete</button>
+      </div>
     </div>${tabHtml}`;
   }).join('');
 }
@@ -1548,8 +1996,9 @@ let playerMode = 'chords';
 function stopPlayback() {
   if (progRunning) { progRunning = false; clearTimeout(progTimeout); }
   if (tabRunning) { tabRunning = false; tabTimeouts.forEach(clearTimeout); tabTimeouts = []; }
+  if (transport.running && transport.owner === 'melody') clearTransport();
   const btn = document.getElementById('player-play-btn');
-  if (btn) { btn.textContent = '▶ Play'; btn.className = 'btn'; }
+  if (btn) { btn.textContent = 'Play'; btn.className = 'btn btn-go'; }
 }
 
 function setPlayerMode(mode) {
@@ -1558,25 +2007,16 @@ function setPlayerMode(mode) {
   document.querySelectorAll('.player-mode').forEach(b => b.classList.toggle('btn-active', b.dataset.mode === mode));
   document.getElementById('player-chords').style.display = mode === 'chords' ? '' : 'none';
   document.getElementById('player-tab').style.display = mode === 'tab' ? '' : 'none';
+  document.getElementById('player-melody').style.display = mode === 'melody' ? '' : 'none';
 }
 
 function playerPlay() {
   if (playerMode === 'tab') playTabWriter();
+  else if (playerMode === 'melody') melodyPlay();
   else playProgression();
 }
 
 // ── Smart paste import ──
-function toggleImport() {
-  const a = document.getElementById('import-area');
-  const open = a.style.display === 'none';
-  a.style.display = open ? 'block' : 'none';
-  if (open) document.getElementById('import-input').focus();
-}
-function closeImport() {
-  document.getElementById('import-area').style.display = 'none';
-  document.getElementById('import-input').value = '';
-}
-
 // True if a token is a plausible chord symbol: root (+accidental), an optional
 // known quality, and an optional /bass — strict enough to reject lyric words.
 function isChordToken(t) {
@@ -1612,28 +2052,33 @@ function smartImport(text) {
   if (isTab) {
     setPlayerMode('tab');
     document.getElementById('tab-input').value = t;
-    closeImport();
     return;
   }
   const chords = importChordSheet(t);
   if (chords.length) {
     setPlayerMode('chords');
     document.getElementById('chord-prog').value = chords.join(' ');
-    closeImport();
+    refreshChordSet();
   } else {
     alert('Could not detect a tab or chord sheet.\n\nFor tab, include lines like  e|--0--2--3--\nFor chords, paste a chord sheet with chord names on their own lines above the lyrics.');
   }
 }
 
+// Returns { src, text } describing what's currently driving the board: the
+// Player (chord shapes) takes priority when its Shapes toggle is on, otherwise
+// the Fretboard tab's selection is shown.
 function getInfoText() {
+  if (chordSetActive())
+    return { src: 'PLAYER', text: state.chordSet.map(c => c.root + (QSUF[c.q] || '')).join(' ') + ' · shapes' };
   let text = '';
   if (state.view === 'all') text = 'All Notes';
   else if (state.view === 'root') text = state.root + ' Root';
   else if (state.view === 'chord') text = state.root + ' ' + state.chord;
   else if (state.view === 'scale') text = state.root + ' ' + state.scale;
+  if (state.diatonic && state.keyRoot) text += ' | Key ' + state.keyRoot;
   if (state.caged.size) text += ' | CAGED: ' + [...state.caged].join('');
   if (state.triadGrps.size) text += ' | Triads';
-  return text;
+  return { src: 'FRETBOARD', text };
 }
 
 function populateRootSelect() {
@@ -1672,15 +2117,22 @@ function onSettingChange() {
   } else if (type === 'scale') {
     state.view = 'scale'; state.scale = name || 'Ionian';
   }
+  buildDiatonicChips();
+  updateSendPreview();
   renderFretboard();
 }
 
-function onInstrumentChange() {
-  state.instrument = document.getElementById('sel-instrument').value;
-  state.caged.clear();
-  state.triadGrps.clear();
-  buildChips();
+// One menu controls both the instrument and its voice: Acoustic/Electric pick
+// the guitar with that tone; Bass switches to the bass instrument + voice.
+function onSoundChange() {
+  const v = document.getElementById('sel-sound').value;
+  const wasBass = isBass();
+  if (v === 'bass') { state.instrument = 'bass'; state.tone = 'bass'; }
+  else { state.instrument = 'guitar'; state.tone = v; }
+  if (isBass() !== wasBass) { state.caged.clear(); state.triadGrps.clear(); buildChips(); }
   renderFretboard();
+  // Sound a reference note so the change is audible right away.
+  pluck(getStrFreqs()[Math.min(2, nStrings() - 1)], null, 0.9);
 }
 
 function toggleLabels() {
@@ -1696,16 +2148,307 @@ function toggleTheme() {
   renderFretboard();
 }
 
+// Clear All resets everything on both tabs: the fretboard view and the
+// Metronome/Player (including any chords, tabs and shapes set).
 function clearAll() {
+  clearBoard();
+  clearTools();
+}
+
+function clearBoard() {
   state.view = 'all'; state.root = ''; state.caged.clear(); state.triadGrps.clear();
+  state.diatonic = true; state.keyRoot = '';     // Chords in Key defaults to On
+  updateDiatonicBtn();
   document.getElementById('sel-root').value = '';
   document.getElementById('sel-type').value = 'all';
   onTypeChange();
   buildChips();
+  buildDiatonicChips();
   renderFretboard();
 }
 
+function clearTools() {
+  // Metronome / Melody Maker → defaults (stop anything playing)
+  clearTransport();
+  document.getElementById('metro-bpm').value = 120;
+  document.getElementById('metro-top').value = 4;
+  document.getElementById('metro-bot').value = 4;
+  document.getElementById('metro-groove').value = 'click';
+  document.getElementById('mm-style').value = 'rock';
+  document.getElementById('mm-bars').value = '2';
+  document.getElementById('mm-drums').checked = true;
+  mmState.melody = []; mmState.ascii = ''; mmState.sig = ''; mmState.mode = 'lick';
+  const mmTab = document.getElementById('mm-tab');
+  if (mmTab) mmTab.textContent = 'Pick a root + scale on the fretboard, then Generate.';
+  metroUpdate();
+  // Player → defaults, clear all inputs
+  stopPlayback();
+  setPlayerMode('chords');
+  document.getElementById('chord-prog').value = '';
+  document.getElementById('prog-pattern').value = '';
+  document.getElementById('tab-input').value = '';
+  document.getElementById('tab-lick-name').value = '';
+  document.getElementById('tab-subdiv').value = '8';
+  document.getElementById('cs-shape').value = 'auto';
+  // Collapse the shape builder back to its default hidden state.
+  const csb = document.getElementById('cs-builder');
+  if (csb) csb.style.display = 'none';
+  const cst = document.getElementById('cs-toggle');
+  if (cst) { cst.textContent = 'Add chord shape'; cst.classList.remove('btn-active'); }
+  state.chordSetOn = false;
+  refreshChordSet();          // re-parse the now-empty chord box, hide shapes + chips
+  renderFretboard();
+}
+
+// ── Chords in Key (diatonic) ──
+// When the Root dropdown changes, treat it as choosing the key's tonic so the
+// chord family follows along.
+function onRootChange() {
+  if (state.diatonic) state.keyRoot = document.getElementById('sel-root').value;
+  onSettingChange();
+}
+
+function updateDiatonicBtn() {
+  const btn = document.getElementById('diatonic-btn');
+  if (!btn) return;
+  btn.textContent = state.diatonic ? 'On' : 'Off';
+  btn.classList.toggle('btn-active', state.diatonic);
+}
+
+function toggleDiatonic() {
+  state.diatonic = !state.diatonic;
+  if (state.diatonic && state.root) state.keyRoot = state.root;
+  updateDiatonicBtn();
+  buildDiatonicChips();
+  renderFretboard();
+}
+
+function buildDiatonicChips() {
+  const wrap = document.getElementById('diatonic-chips');
+  const keyLbl = document.getElementById('diatonic-key');
+  const hint = document.getElementById('diatonic-hint');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!state.diatonic) { keyLbl.textContent = ''; hint.textContent = ''; return; }
+  if (!state.keyRoot) {
+    keyLbl.textContent = '';
+    hint.textContent = 'Pick a Root above to see its chord family.';
+    return;
+  }
+  const ki = NOTES.indexOf(state.keyRoot);
+  const scaleKey = effectiveKeyScale();
+  keyLbl.textContent = 'Key of ' + state.keyRoot + ' ' + keyScaleLabel(scaleKey);
+  hint.textContent = 'Tap a chord to show it on the fretboard.';
+  for (const d of diatonicTriads(scaleKey)) {
+    const noteName = NOTES[(ki + d.deg) % 12];
+    const chordName = noteName + (DIATONIC_SUFFIX[d.type] || '');
+    const isActive = state.view === 'chord' && state.root === noteName && state.chord === d.type;
+    const chip = document.createElement('div');
+    chip.className = 'chip keychip' + (isActive ? ' active' : '');
+    chip.innerHTML = `<span class="rn">${d.roman}</span><span class="cn">${chordName}</span>`;
+    chip.addEventListener('click', () => selectDiatonic(noteName, d.type));
+    wrap.appendChild(chip);
+  }
+}
+
+// ── Send to Player ──
+// Build a chord token from the current fretboard selection: Root + Name give
+// the chord; a selected Triad string-set wins over a selected CAGED shape;
+// with neither selected the shape is auto-picked.
+function currentChordToken() {
+  const root = state.root;
+  if (!root) return null;
+  const q = state.view === 'chord' ? state.chord : 'Major';
+  let shape = 'auto';
+  const set = state.triadGrps.size ? Math.min(...state.triadGrps) + 1 : null;
+  const caged = state.caged.size ? [...state.caged][0] : null;
+  if (!isBass()) {
+    if (set && caged) shape = caged + set;        // triad voiced inside the CAGED shape, e.g. E2
+    else if (set) shape = 't' + set;              // independent triad on that string-set
+    else if (caged) shape = caged;                // full CAGED shape
+  }
+  return chordToToken({ root, q, shape });
+}
+
+function updateSendPreview() {
+  const el = document.getElementById('send-preview');
+  const btn = document.getElementById('send-btn');
+  if (!el) return;
+  const tok = currentChordToken();
+  el.textContent = tok || '(pick a Root)';
+  if (btn) btn.disabled = !tok;
+}
+
+// Append the current chord to the Player's box without switching tabs, so you
+// can build up several chords. Doesn't force the board into shape view.
+function sendCurrentToPlayer() {
+  const tok = currentChordToken();
+  if (!tok) { alert('Pick a Root (and set Type to Chord) first.'); return; }
+  const inp = document.getElementById('chord-prog');
+  inp.value = (inp.value.trim() + ' ' + tok).trim();
+  refreshChordSet();
+  const btn = document.getElementById('send-btn');
+  if (btn) { const o = btn.textContent; btn.textContent = 'Added'; setTimeout(() => { btn.textContent = o; }, 800); }
+}
+
+// Show one diatonic chord on the fretboard without disturbing the key tonic.
+function selectDiatonic(noteName, type) {
+  document.getElementById('sel-root').value = noteName;
+  document.getElementById('sel-type').value = 'chord';
+  onTypeChange();                                  // populate chord names, sets state to Major
+  document.getElementById('sel-name').value = type;
+  onSettingChange();                               // apply the chosen chord (keyRoot untouched)
+}
+
+// ── Chord Set: shares the Player's chord box ──
+// The progression typed in #chord-prog is the single source of chords. Each
+// chord can carry a CAGED shape suffix (e.g. F@E); the "Shapes" toggle draws
+// them on the fretboard. Shape suffixes and strum modifiers are ignored by the
+// progression player, so the same box both plays and displays.
+function progChords() {
+  const raw = (document.getElementById('chord-prog').value || '').trim();
+  const tokens = raw ? raw.split(/[\s,]+/).filter(Boolean) : [];
+  const chords = [];
+  tokens.forEach((tok, ti) => {
+    if (/^tab:/i.test(tok)) return;          // embedded licks aren't chords
+    const c = parseChordSetToken(tok);
+    if (c) { c.ti = ti; chords.push(c); }
+  });
+  return { tokens, chords };
+}
+
+// Re-parse the chord box → refresh chips and the fretboard.
+function refreshChordSet() {
+  state.chordSet = progChords().chords;
+  updateShapeBtn();
+  buildChordSetChips();
+  renderFretboard();
+}
+
+function updateShapeBtn() {
+  const btn = document.getElementById('chordset-btn');
+  if (btn) {
+    btn.textContent = state.chordSetOn ? 'On' : 'Off';
+    btn.classList.toggle('btn-active', state.chordSetOn);
+  }
+}
+
+function toggleChordSet() {
+  state.chordSetOn = !state.chordSetOn;
+  refreshChordSet();
+}
+
+// Show/hide the collapsible chord-shape builder (kept out of the way by default).
+function toggleShapeBuilder() {
+  const el = document.getElementById('cs-builder');
+  const open = el.style.display === 'none';
+  el.style.display = open ? '' : 'none';
+  const btn = document.getElementById('cs-toggle');
+  btn.textContent = open ? 'Hide builder' : 'Add chord shape';
+  btn.classList.toggle('btn-active', open);
+}
+
+function chordToToken(c) {
+  const sym = c.root + (QSUF[c.q] || '');
+  return (c.shape && c.shape !== 'auto') ? sym + '@' + c.shape : sym;
+}
+
+// Lenient parser: pull root, classify the quality (extensions map to a base
+// triad for shape purposes), and read an optional @shape suffix.
+function parseChordSetToken(tok) {
+  tok = (tok || '').trim();
+  if (!tok) return null;
+  let shape = 'auto';
+  const tm = tok.match(/@t([1-4])/i);                        // @t1..@t4 triad string-set
+  const cm = tok.match(/@([CAGEDcaged])([1-4])(?![0-9])/);   // @E2 shape + triad set
+  const sm = tok.match(/@([CAGEDcaged])(?![A-Za-z0-9])/);    // @shape, not @5 / @maj
+  if (tm) { shape = 't' + tm[1]; tok = tok.slice(0, tm.index) + tok.slice(tm.index + 3); }
+  else if (cm) { shape = cm[1].toUpperCase() + cm[2]; tok = tok.slice(0, cm.index) + tok.slice(cm.index + 3); }
+  else if (sm) { shape = sm[1].toUpperCase(); tok = tok.slice(0, sm.index) + tok.slice(sm.index + 2); }
+  const m = tok.match(/^([A-Ga-g][#b]?)(.*)$/);
+  if (!m) return null;
+  let rn = m[1].toUpperCase();
+  if (rn.length === 2 && rn[1] === 'B') rn = FLATS[rn] || rn;   // flat → sharp
+  if (NOTES.indexOf(rn) < 0) return null;
+  const ql = m[2].toLowerCase();
+  let q = 'Major';
+  if (/^(dim|°|o(?![a-z]))/.test(ql)) q = 'Dim';
+  else if (/^(aug|\+)/.test(ql)) q = 'Aug';
+  else if (/^sus2/.test(ql)) q = 'Sus2';
+  else if (/^sus/.test(ql)) q = 'Sus4';
+  else if (/^m(?!aj)/.test(ql)) q = 'Minor';
+  return { root: rn, q, shape };
+}
+
+// Builder: append a chord (with optional shape) to the chord box.
+function chordSetAdd() {
+  const tok = chordToToken({
+    root: document.getElementById('cs-root').value,
+    q: document.getElementById('cs-qual').value,
+    shape: document.getElementById('cs-shape').value
+  });
+  const inp = document.getElementById('chord-prog');
+  inp.value = (inp.value.trim() + ' ' + tok).trim();
+  state.chordSetOn = true;
+  refreshChordSet();
+}
+
+// Remove the chord's token from the chord box (other tokens are preserved).
+function chordSetRemove(i) {
+  const { tokens, chords } = progChords();
+  const c = chords[i];
+  if (!c) return;
+  tokens.splice(c.ti, 1);
+  document.getElementById('chord-prog').value = tokens.join(' ');
+  refreshChordSet();
+}
+
+function chordSetStrum(i) {
+  const res = chordSetEntryNotes(state.chordSet[i]);
+  if (!res) return;
+  const dnotes = res.notes.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+  playStrum(dnotes, 30);
+}
+
+// Notes (low-string-first [freq, si, fret]) for a chord token that names a
+// shape (CAGED letter or triad t1..t4). Returns null for plain chords or on
+// bass, so the caller falls back to the generic voicing.
+function shapeVoicingNotes(sym) {
+  if (isBass()) return null;
+  const c = parseChordSetToken(sym);
+  if (!c || !c.shape || c.shape === 'auto') return null;
+  const res = chordSetEntryNotes(c);
+  if (!res) return null;
+  return res.notes.slice().sort((a, b) => b.si - a.si).map(p => [p.freq, p.si, p.fret]);
+}
+
+function buildChordSetChips() {
+  const wrap = document.getElementById('cs-chips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  state.chordSet.forEach((c, i) => {
+    const res = chordSetEntryNotes(c);
+    const shapeName = res ? res.shapeName : (c.shape && c.shape !== 'auto' ? c.shape : '?');
+    const col = CHORD_SET_COLORS[i % CHORD_SET_COLORS.length];
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.style.borderColor = col;
+    if (!res) chip.style.opacity = '0.5';
+    chip.innerHTML = `<span style="color:${col};font-weight:700">${c.root}${QSUF[c.q] || ''}</span> <span style="opacity:.7">(${shapeName})</span> <span class="cs-x" style="margin-left:6px;opacity:.6;font-weight:700">x</span>`;
+    chip.addEventListener('click', e => {
+      if (e.target.classList.contains('cs-x')) { e.stopPropagation(); chordSetRemove(i); }
+      else chordSetStrum(i);
+    });
+    wrap.appendChild(chip);
+  });
+}
+
 function buildChips() {
+  // Chord shapes use CAGED voicings (guitar-only); hide the shape controls for
+  // bass. The chord box itself still plays as a progression.
+  const csControls = document.getElementById('cs-controls');
+  if (csControls) csControls.style.display = isBass() ? 'none' : '';
+
   // CAGED
   const cagedContainer = document.getElementById('caged-chips');
   const cagedSection = document.getElementById('caged-section');
@@ -1751,6 +2494,457 @@ function buildChips() {
     });
     triadContainer.appendChild(chip);
   }
+  updateSendPreview();
+}
+
+// ════════════════════════════════════════════════════════════════
+// DRUM KIT + TRANSPORT (shared by the Metronome groove and Melody Maker)
+// ════════════════════════════════════════════════════════════════
+// One-bar (4-beat) drum patterns. spb = steps per beat (4 = 16ths,
+// 3 = triplet/shuffle). Voice arrays: 0 = off, 1 = normal, 2 = accent.
+const DRUM_PATTERNS = {
+  rock: { spb: 4,
+    kick:  [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0],
+    snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hat:   [2,0,1,0, 2,0,1,0, 2,0,1,0, 2,0,1,0],
+    ohat:  [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1] },
+  funk: { spb: 4,
+    kick:  [2,0,0,1, 0,0,1,0, 0,1,0,0, 0,0,1,0],
+    snare: [0,0,1,0, 2,0,0,1, 0,0,1,0, 2,0,0,0],
+    hat:   [2,1,1,1, 2,1,1,1, 2,1,1,1, 2,1,1,1],
+    ohat:  [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0] },
+  blues: { spb: 3,                       // triplet shuffle feel
+    kick:  [1,0,0, 0,0,0, 1,0,0, 0,0,0],
+    snare: [0,0,0, 1,0,0, 0,0,0, 1,0,0],
+    hat:   [2,0,1, 2,0,1, 2,0,1, 2,0,1],
+    ohat:  [0,0,0, 0,0,0, 0,0,0, 0,0,1] }
+};
+
+// A single lookahead scheduler drives both the metronome groove and the
+// Melody Maker jam. Only one is ever active at a time.
+const transport = {
+  running: false, owner: null, bpm: 120, style: 'rock',
+  drumsOn: true, melodyOn: false, melody: [], loopSteps: 16, spb: 4,
+  step: 0, nextTime: 0, timer: null, hlTimers: []
+};
+
+function transportStepDur() { return (60 / transport.bpm) / transport.spb; }
+
+function clearTransport() {
+  transport.running = false;
+  if (transport.timer) { clearInterval(transport.timer); transport.timer = null; }
+  (transport.hlTimers || []).forEach(clearTimeout); transport.hlTimers = [];
+  if (metro.running) metro.running = false;
+  clearTimeout(metro.timeout);
+  const mb = document.getElementById('metro-btn');
+  if (mb) { mb.textContent = 'Start'; mb.className = 'btn'; }
+  const pb = document.getElementById('player-play-btn');
+  if (pb) { pb.textContent = 'Play'; pb.className = 'btn btn-go'; }
+}
+
+function startTransport(cfg) {
+  clearTransport();
+  Object.assign(transport, cfg);
+  transport.running = true; transport.step = 0; transport.hlTimers = [];
+  const ctx = getCtx();
+  transport.nextTime = ctx.currentTime + 0.08;
+  transport.timer = setInterval(scheduleTransport, 25);
+  scheduleTransport();
+}
+
+function scheduleTransport() {
+  if (!transport.running) return;
+  const ctx = getCtx();
+  while (transport.nextTime < ctx.currentTime + 0.12) {
+    playTransportStep(transport.step, transport.nextTime);
+    transport.nextTime += transportStepDur();
+    transport.step = (transport.step + 1) % transport.loopSteps;
+  }
+}
+
+function playTransportStep(step, when) {
+  if (transport.drumsOn) {
+    const pat = DRUM_PATTERNS[transport.style] || DRUM_PATTERNS.rock;
+    const barSteps = pat.spb * 4;
+    const s = step % barSteps;
+    if (pat.kick[s])  drumKick(when, pat.kick[s] === 2 ? 1 : 0.82);
+    if (pat.snare[s]) drumSnare(when, pat.snare[s] === 2 ? 1 : 0.55);
+    if (pat.hat[s])   drumHat(when, pat.hat[s] === 2 ? 0.9 : 0.45, false);
+    if (pat.ohat[s])  drumHat(when, 0.7, true);
+  }
+  if (transport.melodyOn && transport.melody) {
+    for (const ev of transport.melody) if (ev.step === step) scheduleMelodyEvent(ev, when);
+  }
+}
+
+// Play one melody note at audio-time `when`, rendering its technique
+// (hammer/pull/slide/bend/vibrato) with the plucked-string voice.
+function scheduleMelodyEvent(ev, when) {
+  const ctx = getCtx();
+  const hl = (si, fr, at) => {
+    const ms = Math.max(0, (at - ctx.currentTime) * 1000);
+    transport.hlTimers.push(setTimeout(() => { if (transport.running) highlightPlayedNote(si, fr); }, ms));
+  };
+  const f = ev.freq, tf = ev.targetFreq;
+  switch (ev.tech) {
+    case 'h':                                   // hammer-on: pluck, then sound higher
+      playNoteAt(f, when, 0.95); hl(ev.si, ev.fr, when);
+      if (tf) { playNoteAt(tf, when + 0.065, 0.9); hl(ev.si, ev.targetFr, when + 0.065); }
+      break;
+    case 'p':                                   // pull-off: pluck, then softer lower note
+      playNoteAt(f, when, 0.95); hl(ev.si, ev.fr, when);
+      if (tf) { playNoteAt(tf, when + 0.07, 0.7); hl(ev.si, ev.targetFr, when + 0.07); }
+      break;
+    case '/': case 'b':                         // slide up / bend: scoop up to the note
+      playNoteAt(f * Math.pow(2, -2 / 12), when, 0.85);
+      playNoteAt(f, when + 0.035, 0.95); hl(ev.si, ev.fr, when);
+      if (tf) { playNoteAt(tf, when + 0.075, 0.9); hl(ev.si, ev.targetFr, when + 0.075); }
+      break;
+    case '\\':                                  // slide down
+      playNoteAt(f * Math.pow(2, 2 / 12), when, 0.85);
+      playNoteAt(f, when + 0.035, 0.95); hl(ev.si, ev.fr, when);
+      if (tf) { playNoteAt(tf, when + 0.075, 0.9); hl(ev.si, ev.targetFr, when + 0.075); }
+      break;
+    case '~':                                   // vibrato: note then small pitch wobble
+      playNoteAt(f, when, 0.95); hl(ev.si, ev.fr, when);
+      [0.012, -0.012, 0.009, -0.009, 0.006, -0.006].forEach((d, i) =>
+        playNoteAt(f * (1 + d), when + 0.185 + i * 0.09, 0.5));
+      break;
+    default:
+      playNoteAt(f, when, 0.95); hl(ev.si, ev.fr, when);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// MELODY MAKER
+// ════════════════════════════════════════════════════════════════
+const mmState = { melody: [], loopSteps: 16, spb: 4, sig: '', ascii: '', mode: 'lick' };
+
+// Root + scale to generate over: use the fretboard's selection, falling back
+// to the Chords-in-Key root, then A.
+function currentMelodyKey() {
+  const root = state.root || state.keyRoot || 'A';
+  return { rootIdx: NOTES.indexOf(root), root, scale: state.scale };
+}
+
+function freqToMidi(f) { return Math.round(69 + 12 * Math.log2(f / 440)); }
+
+// Build the pool of in-scale fret positions inside a playable ~6-fret box on
+// the melody strings (the higher strings). Returns positions sorted by pitch.
+function buildScalePositions(rootIdx, scale) {
+  const ivals = SCALE_INTERVALS[scale] || SCALE_INTERVALS.Ionian;
+  const pcSet = new Set(ivals.map(i => (rootIdx + i) % 12));
+  const ns = nStrings();
+  const melStrings = ns >= 6 ? [0, 1, 2, 3] : [0, 1, 2];   // high strings
+  const sNotes = getStrNotes(), sFreqs = getStrFreqs();
+  // Anchor the box where the root sits on the lowest melody string.
+  const anchorSi = melStrings[melStrings.length - 1];
+  const openA = NOTES.indexOf(sNotes[anchorSi]);
+  let base = ((rootIdx - openA) % 12 + 12) % 12;
+  if (base > N_FRETS - 6) base -= 12;
+  if (base < 0) base += 12;
+  base = Math.max(0, Math.min(N_FRETS - 6, base));
+  const pos = [];
+  for (const si of melStrings) {
+    const open = NOTES.indexOf(sNotes[si]);
+    for (let fr = base; fr <= base + 5 && fr < N_FRETS; fr++) {
+      if (pcSet.has((open + fr) % 12)) {
+        const freq = Math.round(sFreqs[si] * Math.pow(2, fr / 12) * 10000) / 10000;
+        pos.push({ si, fr, freq, p: freqToMidi(freq), pc: (open + fr) % 12 });
+      }
+    }
+  }
+  pos.sort((a, b) => a.p - b.p || a.si - b.si);
+  return pos;
+}
+
+// Per-bar rhythm masks (which grid steps carry an onset), flavored by style.
+function genRhythm(style, spb, bars) {
+  const barSteps = spb * 4, out = [];
+  for (let b = 0; b < bars; b++) {
+    const mask = new Array(barSteps).fill(false);
+    if (style === 'blues') {
+      for (let beat = 0; beat < 4; beat++) {
+        if (Math.random() < 0.9) mask[beat * 3] = true;          // triplet 1
+        if (Math.random() < 0.6) mask[beat * 3 + 2] = true;      // triplet 3 (shuffle)
+        if (Math.random() < 0.12) mask[beat * 3 + 1] = true;
+      }
+    } else if (style === 'funk') {
+      for (let s = 0; s < barSteps; s++) {
+        const onBeat = s % 4 === 0, off8 = s % 2 === 0;
+        mask[s] = Math.random() < (onBeat ? 0.5 : off8 ? 0.4 : 0.55);  // syncopated
+      }
+    } else {                                                       // rock: 8ths + fills
+      for (let s = 0; s < barSteps; s++)
+        mask[s] = (s % 2 === 0) ? Math.random() < 0.85 : Math.random() < 0.18;
+    }
+    mask[0] = true;                                                // ground each bar
+    out.push(mask);
+  }
+  return out;
+}
+
+// ── Classic blues lick library ──────────────────────────────────
+// Each lick is one bar of triplets (12 steps). A note is
+// [step, string(0=e), fretOffset, tech?, targetFretOffset?] where the
+// offset is measured from the minor-pentatonic "box 1" base (root on the
+// high-E string). tech: h=hammer p=pull /=slide-up \=slide-down ~=vibrato
+// b=bend. These are traditional blues idioms (box-1 vocabulary, turnarounds,
+// B.B.-style bends) — generic licks, transposed into the player's key.
+const BLUES_LICKS = [
+  // L1 — descending box with pull-offs, resolves to the root w/ vibrato
+  [[0,0,3,'p',0],[3,1,3],[4,1,0],[6,2,2,'p',0],[9,3,2,'~']],
+  // L2 — ascending hammer-ons into a bend
+  [[0,3,0,'h',2],[3,2,0,'h',2],[6,1,0,'h',3],[9,0,3,'b',5]],
+  // L3 — B.B.-style: bend, release, vibrato
+  [[0,1,0],[2,0,0,'~'],[4,0,3,'b',5],[6,0,0],[9,1,3,'b',5]],
+  // L4 — slide into the box, turnaround feel
+  [[0,2,0,'/',2],[3,1,0],[6,1,3],[9,0,0,'~']],
+  // L5 — repeating call motif (same gesture twice = easy to learn)
+  [[0,1,3,'p',0],[3,0,0,'~'],[6,1,3,'p',0],[9,0,0,'~']],
+  // L6 — triplet roll with a slide-down and vibrato tail
+  [[0,0,0],[2,0,3,'p',0],[3,1,0],[6,2,2,'\\',0],[9,3,2,'~']]
+];
+
+// Base fret of box 1 (root on the high-E string) for a given root.
+function boxBaseFret(rootIdx) {
+  const openHi = NOTES.indexOf(getStrNotes()[0]);
+  return ((rootIdx - openHi) % 12 + 12) % 12;
+}
+
+// Assemble a blues melody from classic licks, with blues phrasing/repetition:
+// 2 bars = call/call, 4 bars = call/call/response/call (A A B A).
+function genBluesMelody(rootIdx, scale, bars) {
+  if (isBass() || nStrings() < 6) return genScaleMelody(rootIdx, scale, 'blues', bars);
+  const base = boxBaseFret(rootIdx);
+  const sFreqs = getStrFreqs();
+  const freqAt = (si, fr) => Math.round(sFreqs[si] * Math.pow(2, fr / 12) * 10000) / 10000;
+  const barSteps = 12, n = BLUES_LICKS.length;
+  let p = Math.floor(Math.random() * n), q = Math.floor(Math.random() * n);
+  if (q === p) q = (q + 1) % n;
+  const plan = bars >= 4 ? [p, p, q, p] : (bars === 3 ? [p, q, p] : [p, p]);
+  const melody = [];
+  plan.forEach((lk, b) => {
+    for (const note of BLUES_LICKS[lk]) {
+      const st = note[0], si = note[1], off = note[2], tech = note[3] || null;
+      const tgtOff = note.length > 4 ? note[4] : null;
+      // Octave-safe placement: keep the technique's interval intact.
+      let f = base + off, shift = 0;
+      while (f >= N_FRETS) { f -= 12; shift -= 12; }
+      while (f < 0) { f += 12; shift += 12; }
+      let tf = null, tfreq = null;
+      if (tech && tgtOff != null) {
+        tf = base + tgtOff + shift;
+        if (tf >= N_FRETS || tf < 0) { f -= 12; tf -= 12; }
+        if (f < 0 || tf < 0) { f += 12; tf += 12; }
+        tfreq = freqAt(si, tf);
+      }
+      melody.push({ step: b * barSteps + st, si, fr: f, freq: freqAt(si, f), tech, targetFr: tf, targetFreq: tfreq });
+    }
+  });
+  return { melody, loopSteps: plan.length * barSteps, spb: 3 };
+}
+
+// ── 12-bar blues shuffle backing (I–IV–V boogie) ─────────────────
+// Standard 12-bar form as semitone offsets from the tonic (V turnaround).
+const TWELVE_BAR = [0, 0, 0, 0, 5, 5, 0, 0, 7, 5, 0, 7];
+
+// Place a chord root low on the neck (E/A/D string region) so the boogie
+// dyads — root + 5th/6th/b7 on the next string up — stay in a playable box.
+function shuffleRootPos(pc) {
+  const ns = nStrings(), sNotes = getStrNotes();
+  const cands = [ns - 1, ns - 2, ns - 3].filter(rs => rs >= 1);
+  for (const rs of cands) {
+    const rf = ((pc - NOTES.indexOf(sNotes[rs])) % 12 + 12) % 12;
+    if (rf <= 9) return { rs, rf };
+  }
+  const rs = cands[0];
+  let rf = ((pc - NOTES.indexOf(sNotes[rs])) % 12 + 12) % 12;
+  if (rf > 9) rf -= 12; if (rf < 0) rf = 0;
+  return { rs, rf };
+}
+
+// Build the full 12-bar shuffle: each bar plays the boogie pattern (root + 5,6
+// dyads with a b7 lift), on triplet steps for the shuffle feel.
+function gen12BarBlues(rootIdx) {
+  const sFreqs = getStrFreqs();
+  const freqAt = (si, fr) => Math.round(sFreqs[si] * Math.pow(2, fr / 12) * 10000) / 10000;
+  const hits = [0, 2, 3, 5, 6, 8, 9, 11];     // shuffle: long-short on each beat
+  const ivals = [2, 4, 2, 4, 2, 4, 2, 5];      // 5th,6th,5th,6th,5th,6th,5th,b7
+  const barSteps = 12, melody = [];
+  TWELVE_BAR.forEach((deg, b) => {
+    const pos = shuffleRootPos((rootIdx + deg) % 12);
+    const upSi = pos.rs - 1;
+    for (let i = 0; i < 8; i++) {
+      const st = b * barSteps + hits[i], uf = pos.rf + ivals[i];
+      melody.push({ step: st, si: pos.rs, fr: pos.rf, freq: freqAt(pos.rs, pos.rf) });
+      if (upSi >= 0 && uf < N_FRETS) melody.push({ step: st, si: upSi, fr: uf, freq: freqAt(upSi, uf) });
+    }
+  });
+  return { melody, loopSteps: TWELVE_BAR.length * barSteps, spb: 3 };
+}
+
+// Generate a melody over the current key with style-flavored rhythm + phrasing.
+function generateMelody() {
+  const style = document.getElementById('mm-style').value;
+  const bars = parseInt(document.getElementById('mm-bars').value) || 2;
+  const { rootIdx, root, scale } = currentMelodyKey();
+  const res = style === 'blues' ? genBluesMelody(rootIdx, scale, bars)
+                                : genScaleMelody(rootIdx, scale, style, bars);
+  mmState.melody = res.melody;
+  mmState.loopSteps = res.loopSteps;
+  mmState.spb = res.spb;
+  mmState.style = style;
+  mmState.sig = melodySig(style, bars, root, scale);
+  mmState.ascii = melodyToAscii(res.melody, res.loopSteps, res.spb * 4);
+  mmState.mode = 'lick';
+  renderMelodyTab(root, scale, style);
+}
+
+// Build the 12-bar blues shuffle backing in the current key, ready to loop.
+function melody12Bar() {
+  clearTransport();
+  const { rootIdx, root, scale } = currentMelodyKey();
+  const res = gen12BarBlues(rootIdx);
+  mmState.melody = res.melody;
+  mmState.loopSteps = res.loopSteps;
+  mmState.spb = res.spb;
+  mmState.style = 'blues';
+  mmState.mode = '12bar';
+  mmState.sig = '12bar|' + root;
+  document.getElementById('mm-style').value = 'blues';
+  mmState.ascii = melodyToAscii(res.melody, res.loopSteps, res.spb * 4);
+  renderMelodyTab(root, scale, '12-bar shuffle (I–IV–V)');
+}
+
+// Stepwise random-walk generator (rock / funk), constrained to the key.
+function genScaleMelody(rootIdx, scale, style, bars) {
+  const spb = DRUM_PATTERNS[style].spb, barSteps = spb * 4;
+  const pos = buildScalePositions(rootIdx, scale);
+  if (!pos.length) return { melody: [], loopSteps: bars * barSteps, spb };
+
+  // Pitch pool grouped by MIDI value; chord tones (R/3/5) used for resolutions.
+  const byP = {};
+  for (const o of pos) (byP[o.p] = byP[o.p] || []).push(o);
+  const P = Object.keys(byP).map(Number).sort((a, b) => a - b);
+  const chordPcs = new Set([rootIdx % 12, (rootIdx + ((SCALE_INTERVALS[scale] || []).includes(3) ? 3 : 4)) % 12, (rootIdx + 7) % 12]);
+  const isChordTone = idx => chordPcs.has(byP[P[idx]][0].pc);
+  const nearestChordTone = idx => {
+    for (let d = 0; d < P.length; d++) {
+      if (idx - d >= 0 && isChordTone(idx - d)) return idx - d;
+      if (idx + d < P.length && isChordTone(idx + d)) return idx + d;
+    }
+    return idx;
+  };
+
+  const rhythm = genRhythm(style, spb, bars);
+  const melody = [];
+  let idx = P.findIndex(p => byP[p][0].pc === rootIdx % 12);
+  if (idx < 0) idx = Math.floor(P.length / 2);
+  let prev = byP[P[idx]][0];
+
+  for (let b = 0; b < bars; b++) {
+    const onsets = [];
+    for (let s = 0; s < barSteps; s++) if (rhythm[b][s]) onsets.push(s);
+    for (let oi = 0; oi < onsets.length; oi++) {
+      const s = onsets[oi];
+      if (s === 0) idx = nearestChordTone(idx);                    // start bar on a chord tone
+      else if (oi === onsets.length - 1 && b === bars - 1) idx = nearestChordTone(idx); // final resolution
+      else {
+        const r = Math.random();
+        let move = r < 0.55 ? (Math.random() < 0.5 ? 1 : -1)
+                 : r < 0.8 ? (Math.random() < 0.5 ? 2 : -2)
+                 : (Math.random() < 0.5 ? 3 : -3);
+        idx = Math.max(0, Math.min(P.length - 1, idx + move));
+      }
+      // Choose the position for this pitch that minimizes the jump from prev.
+      const cands = byP[P[idx]];
+      let best = cands[0], bestCost = 1e9;
+      for (const c of cands) {
+        const cost = Math.abs(c.si - prev.si) * 2 + Math.abs(c.fr - prev.fr);
+        if (cost < bestCost) { bestCost = cost; best = c; }
+      }
+      prev = best;
+      melody.push({ step: b * barSteps + s, si: best.si, fr: best.fr, freq: best.freq });
+    }
+  }
+
+  return { melody, loopSteps: bars * barSteps, spb };
+}
+
+function melodySig(style, bars, root, scale) { return [style, bars, root, scale, nStrings()].join('|'); }
+
+// Render the melody as an ASCII tab (one column-cell per grid step), encoding
+// techniques as e.g. 7h9 (hammer), 9p7 (pull), 7/9 (slide), 7b9 (bend), 7~ (vib).
+function melodyToAscii(mel, loopSteps, barSteps) {
+  const ns = nStrings();
+  const names = ns === 4 ? ['G', 'D', 'A', 'E'] : ['e', 'B', 'G', 'D', 'A', 'E'];
+  const token = ev => {
+    let t = String(ev.fr);
+    if (ev.tech) { t += ev.tech; if (ev.targetFr != null && ev.tech !== '~') t += String(ev.targetFr); }
+    return t;
+  };
+  const cells = Array.from({ length: loopSteps }, () => new Array(ns).fill(''));
+  for (const ev of mel) cells[ev.step][ev.si] = token(ev);
+  let W = 2;
+  for (const row of cells) for (const c of row) if (c.length + 1 > W) W = c.length + 1;
+  let out = '';
+  for (let si = 0; si < ns; si++) {
+    let line = names[si] + '|';
+    for (let st = 0; st < loopSteps; st++) {
+      if (st > 0 && st % barSteps === 0) line += '|';
+      line += (cells[st][si] + '-'.repeat(W)).slice(0, W);
+    }
+    out += line + '|\n';
+  }
+  return out;
+}
+
+function renderMelodyTab(root, scale, style) {
+  const el = document.getElementById('mm-tab');
+  if (!el) return;
+  const label = mmState.melody.length
+    ? `${root} ${scale} · ${style} · ${mmState.loopSteps / mmState.spb / 4} bar(s)`
+    : 'No notes generated';
+  el.textContent = label + '\n\n' + (mmState.ascii || '');
+}
+
+function melodyStale() {
+  if (mmState.mode === '12bar') return !mmState.melody.length;   // explicit; don't auto-regenerate
+  const { root, scale } = currentMelodyKey();
+  const style = document.getElementById('mm-style').value;
+  const bars = parseInt(document.getElementById('mm-bars').value) || 2;
+  return !mmState.melody.length || mmState.sig !== melodySig(style, bars, root, scale);
+}
+
+function melodyPlay() {
+  // Toggle: stop if the melody jam is already looping.
+  if (transport.running && transport.owner === 'melody') { clearTransport(); return; }
+  stopPlayback();                          // stop any chord/tab playback first
+  if (melodyStale()) generateMelody();
+  if (!mmState.melody.length) return;
+  const bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+  startTransport({
+    owner: 'melody', bpm, style: mmState.style, drumsOn: document.getElementById('mm-drums').checked,
+    melodyOn: true, melody: mmState.melody, spb: mmState.spb, loopSteps: mmState.loopSteps
+  });
+  const pb = document.getElementById('player-play-btn');
+  pb.textContent = 'Stop'; pb.className = 'btn btn-danger';
+}
+
+function melodyGenerate() {
+  clearTransport();
+  generateMelody();
+}
+
+// Convert the generated melody into the Player's Tab editor to learn/edit/save it.
+function melodyToTabEditor() {
+  if (melodyStale()) generateMelody();
+  if (!mmState.ascii) return;
+  const ta = document.getElementById('tab-input');
+  ta.value = mmState.ascii.trim();
+  setPlayerMode('tab');
+  ta.scrollIntoView({ block: 'center' });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1758,10 +2952,23 @@ function buildChips() {
 // ════════════════════════════════════════════════════════════════
 function init() {
   populateRootSelect();
+  const csRoot = document.getElementById('cs-root');
+  NOTES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; csRoot.appendChild(o); });
+  csRoot.value = 'C';
   onTypeChange();
   buildChips();
+  updateDiatonicBtn();
+  buildDiatonicChips();
+  refreshChordSet();
+  updateSendPreview();
   loadLicks();
   metroUpdate();
+  const soundSel = document.getElementById('sel-sound');
+  if (soundSel) soundSel.value = isBass() ? 'bass' : state.tone;
+  ['mm-style', 'mm-bars'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { mmState.mode = 'lick'; if (transport.running && transport.owner === 'melody') clearTransport(); });
+  });
 
   // Delegated playback: one listener handles every note dot and strum box,
   // so renders never have to rebind handlers.

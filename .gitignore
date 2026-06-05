@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Android / Gradle build output
+android/app/build/
+android/build/
+android/.gradle/
+android/captures/
+android/local.properties
+*.apk
+*.aab
+
+# Capacitor
+.capacitor/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
