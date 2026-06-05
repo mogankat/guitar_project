@@ -402,13 +402,17 @@ body.light {
       <div id="player-melody" style="display:none">
         <div class="menu-row" style="gap:6px">
           <select id="mm-style" style="flex:1;min-width:0">
-            <option value="rock">Rock</option>
-            <option value="blues">Blues</option>
+            <option value="12bar">12-Bar Blues</option>
+            <option value="blues" selected>Blues</option>
             <option value="funk">Funk</option>
+            <option value="rock">Rock</option>
           </select>
-          <select id="mm-bars" style="width:62px">
+          <select id="mm-bars" style="width:74px">
+            <option value="1">1 bar</option>
             <option value="2" selected>2 bars</option>
             <option value="4">4 bars</option>
+            <option value="8">8 bars</option>
+            <option value="12">12 bars</option>
           </select>
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px">
             <input type="checkbox" id="mm-drums" checked> Drums
@@ -416,7 +420,6 @@ body.light {
         </div>
         <div class="menu-row" style="gap:6px;margin-top:6px">
           <button class="btn btn-sm" style="flex:1" onclick="melodyGenerate()">Generate</button>
-          <button class="btn btn-sm" style="flex:1" onclick="melody12Bar()">12-Bar Blues</button>
           <button class="btn btn-sm" onclick="melodyToTabEditor()">To Tab</button>
         </div>
         <pre id="mm-tab" style="font-family:monospace;font-size:11px;line-height:1.4;white-space:pre;overflow-x:auto;margin:8px 0 0;padding:8px;border-radius:6px;background:rgba(127,127,127,0.12)">Pick a root + scale on the fretboard, then Generate.</pre>
@@ -1729,20 +1732,53 @@ function playTabWriter() {
   }, totalMs));
 }
 
+// Convert a generated melody (grid of steps) to looper notes with exact timing,
+// expanding techniques to extra notes the same way the live transport does.
+function melodyToLickNotes(melody, bpm, spb) {
+  const stepMs = 60000 / bpm / spb;
+  const out = [];
+  for (const ev of melody) {
+    const t = Math.round(ev.step * stepMs);
+    out.push({ f: ev.freq, t, s: ev.si, fr: ev.fr });
+    if (ev.tech && ev.targetFreq != null) {
+      const off = ev.tech === 'h' ? 65 : ev.tech === 'p' ? 70 : 75;   // hammer/pull/slide/bend
+      out.push({ f: ev.targetFreq, t: t + off, s: ev.si, fr: ev.targetFr });
+    }
+  }
+  return out;
+}
+
 function saveTabToLooper() {
   const text = document.getElementById('tab-input').value.trim();
   const name = document.getElementById('tab-lick-name').value.trim();
   if (!text || !name) { alert('Enter tab content and a lick name'); return; }
-  const events = parseTab(text);
-  if (!events.length) { alert('No notes found — check your tab format'); return; }
-  const stepMs = tabStepMs();
-  savedLicks[name] = {
-    ns: nStrings(),
-    notes: eventsToLickNotes(events, stepMs),
-    src: text,                                                         // keep the exact tab text
-    subdiv: parseInt(document.getElementById('tab-subdiv').value) || 8,
-    bpm: parseInt(document.getElementById('metro-bpm').value) || 120
-  };
+  const bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+
+  // If the tab is the unedited output of a generated melody/12-bar, save the
+  // melody's exact grid timing so playback matches what you heard.
+  const fromMelody = mmState.melody && mmState.melody.length &&
+                     mmState.ascii && text === mmState.ascii.trim();
+  let lick;
+  if (fromMelody) {
+    const stepMs = 60000 / bpm / mmState.spb;
+    lick = {
+      ns: nStrings(),
+      notes: melodyToLickNotes(mmState.melody, bpm, mmState.spb),
+      loopMs: Math.round(mmState.loopSteps * stepMs),
+      src: text, subdiv: mmState.spb * 4, bpm
+    };
+  } else {
+    const events = parseTab(text);
+    if (!events.length) { alert('No notes found — check your tab format'); return; }
+    lick = {
+      ns: nStrings(),
+      notes: eventsToLickNotes(events, tabStepMs()),
+      src: text,
+      subdiv: parseInt(document.getElementById('tab-subdiv').value) || 8,
+      bpm
+    };
+  }
+  savedLicks[name] = lick;
   storeLicks(); renderLickList();
   document.getElementById('tab-lick-name').value = '';
 }
@@ -1824,7 +1860,12 @@ function saveLick() {
   document.getElementById('save-area').style.display = 'none';
 }
 
-function deleteLick(name) { delete savedLicks[name]; storeLicks(); renderLickList(); }
+function deleteLick(name) {
+  if (loopingLick === name) stopLoop();   // stop it first, or it keeps looping after deletion
+  delete savedLicks[name];
+  storeLicks();
+  renderLickList();
+}
 
 let loopingLick = null, loopTimeouts = [];
 function playLick(name, loop) {
@@ -1836,7 +1877,9 @@ function playLick(name, loop) {
   const lick = savedLicks[name]; if (!lick) return;
   const notes = lick.notes || lick;
   if (!notes.length) return;
-  const duration = Math.max(...notes.map(n => n.t)) + 500; // total duration + gap
+  // Prefer an exact loop length (set when saved from a generated melody) so the
+  // loop point lands on the bar; otherwise fall back to last-note + a gap.
+  const duration = lick.loopMs || (Math.max(...notes.map(n => n.t)) + 500);
 
   function playOnce() {
     notes.forEach(n => {
@@ -2174,7 +2217,7 @@ function clearTools() {
   document.getElementById('metro-top').value = 4;
   document.getElementById('metro-bot').value = 4;
   document.getElementById('metro-groove').value = 'click';
-  document.getElementById('mm-style').value = 'rock';
+  document.getElementById('mm-style').value = 'blues';
   document.getElementById('mm-bars').value = '2';
   document.getElementById('mm-drums').checked = true;
   mmState.melody = []; mmState.ascii = ''; mmState.sig = ''; mmState.mode = 'lick';
@@ -2722,7 +2765,13 @@ function genBluesMelody(rootIdx, scale, bars) {
   const barSteps = 12, n = BLUES_LICKS.length;
   let p = Math.floor(Math.random() * n), q = Math.floor(Math.random() * n);
   if (q === p) q = (q + 1) % n;
-  const plan = bars >= 4 ? [p, p, q, p] : (bars === 3 ? [p, q, p] : [p, p]);
+  // Call/response phrasing for any bar count: A-A-B-A tiled (the response lands
+  // on bar 3 of each four), so 1/2/4/8/12 bars all read as blues.
+  let plan;
+  if (bars <= 1) plan = [p];
+  else if (bars === 2) plan = [p, p];
+  else if (bars === 3) plan = [p, q, p];
+  else { plan = []; for (let b = 0; b < bars; b++) plan.push(b % 4 === 2 ? q : p); }
   const melody = [];
   plan.forEach((lk, b) => {
     for (const note of BLUES_LICKS[lk]) {
@@ -2789,32 +2838,17 @@ function generateMelody() {
   const style = document.getElementById('mm-style').value;
   const bars = parseInt(document.getElementById('mm-bars').value) || 2;
   const { rootIdx, root, scale } = currentMelodyKey();
-  const res = style === 'blues' ? genBluesMelody(rootIdx, scale, bars)
-                                : genScaleMelody(rootIdx, scale, style, bars);
+  const res = style === '12bar' ? gen12BarBlues(rootIdx)
+            : style === 'blues' ? genBluesMelody(rootIdx, scale, bars)
+            : genScaleMelody(rootIdx, scale, style, bars);
   mmState.melody = res.melody;
   mmState.loopSteps = res.loopSteps;
   mmState.spb = res.spb;
-  mmState.style = style;
+  mmState.style = style === '12bar' ? 'blues' : style;   // 12-bar uses the blues drum groove
   mmState.sig = melodySig(style, bars, root, scale);
   mmState.ascii = melodyToAscii(res.melody, res.loopSteps, res.spb * 4);
-  mmState.mode = 'lick';
-  renderMelodyTab(root, scale, style);
-}
-
-// Build the 12-bar blues shuffle backing in the current key, ready to loop.
-function melody12Bar() {
-  clearTransport();
-  const { rootIdx, root, scale } = currentMelodyKey();
-  const res = gen12BarBlues(rootIdx);
-  mmState.melody = res.melody;
-  mmState.loopSteps = res.loopSteps;
-  mmState.spb = res.spb;
-  mmState.style = 'blues';
-  mmState.mode = '12bar';
-  mmState.sig = '12bar|' + root;
-  document.getElementById('mm-style').value = 'blues';
-  mmState.ascii = melodyToAscii(res.melody, res.loopSteps, res.spb * 4);
-  renderMelodyTab(root, scale, '12-bar shuffle (I–IV–V)');
+  mmState.mode = style === '12bar' ? '12bar' : 'lick';
+  renderMelodyTab(root, scale, style === '12bar' ? '12-bar shuffle (I-IV-V)' : style);
 }
 
 // Stepwise random-walk generator (rock / funk), constrained to the key.
@@ -2910,7 +2944,6 @@ function renderMelodyTab(root, scale, style) {
 }
 
 function melodyStale() {
-  if (mmState.mode === '12bar') return !mmState.melody.length;   // explicit; don't auto-regenerate
   const { root, scale } = currentMelodyKey();
   const style = document.getElementById('mm-style').value;
   const bars = parseInt(document.getElementById('mm-bars').value) || 2;
