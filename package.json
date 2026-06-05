@@ -11,8 +11,21 @@
     "type": "git",
     "url": "git+https://github.com/mogankat/guitar_project.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "guitar",
+    "bass",
+    "fretboard",
+    "scales",
+    "chords",
+    "caged",
+    "metronome",
+    "tab",
+    "music",
+    "education",
+    "pwa",
+    "capacitor"
+  ],
+  "author": "mogankat",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
