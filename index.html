@@ -548,7 +548,7 @@ const state = {
   instrument: 'guitar', labelMode: 'note', dark: true,
   tone: 'acoustic',
   caged: new Set(), triadGrps: new Set(),
-  diatonic: true, keyRoot: '',
+  diatonic: true, keyRoot: '', keyScale: 'Ionian', keyTonic7: false,
   chordSet: [], chordSetOn: false
 };
 
@@ -561,11 +561,15 @@ const FLATS = { CB:'B', DB:'C#', EB:'D#', FB:'E', GB:'F#', AB:'G#', BB:'A#' };
 
 // When the fretboard shows a Chord (not a scale), map its quality to the parent
 // scale whose diatonic chord family we display in "Chords in Key".
+// "Chords in Key" shows the standard diatonic family (I ii iii IV V vi vii°) of
+// the key the chord's root implies, so a dominant 7 reads as the major key built
+// on its root (its tonic 7-ness is restored on the I chip, see buildDiatonicChips)
+// rather than as a Mixolydian harmonization.
 const CHORD_TO_SCALE = {
-  Major: 'Ionian', Minor: 'Aeolian', '7': 'Mixolydian', Dim: 'Locrian',
+  Major: 'Ionian', Minor: 'Aeolian', '7': 'Ionian', Dim: 'Aeolian',
   Aug: 'Ionian', Sus2: 'Ionian', Sus4: 'Ionian', Add9: 'Ionian'
 };
-const DIATONIC_SUFFIX = { Major: '', Minor: 'm', Dim: '°', Aug: '+' };
+const DIATONIC_SUFFIX = { Major: '', Minor: 'm', Dim: '°', Aug: '+', '7': '7' };
 
 // The scale whose chord family "Chords in Key" should show, given the current
 // fretboard selection (a chosen scale wins; otherwise infer from the chord).
@@ -971,10 +975,25 @@ function getNoteCircles() {
 }
 
 // ── Triad logic ──
+// The 3 tones a string-set box should show for a chord. Real triads pass
+// through; 4-note chords (7, add9) reduce to a 3-string "shell" — Root + 3rd +
+// the color tone (b7 / 9), dropping the 5th — which is how they're voiced on
+// three strings and lets the box actually appear.
+function triadDegrees(chordName) {
+  const degs = CHORD_DEGREES[chordName] || CHORD_DEGREES.Major;
+  const entries = Object.entries(degs);
+  if (entries.length <= 3) return degs;
+  const fifths = new Set(['5', '#5', 'b5']);
+  const third = entries.find(([iv, l]) => l === '3' || l === 'b3');
+  const color = entries.find(([iv, l]) => iv !== '0' && l !== '3' && l !== 'b3' && !fifths.has(l));
+  if (third && color) return { 0: 'R', [third[0]]: third[1], [color[0]]: color[1] };
+  return Object.fromEntries(entries.slice(0, 3));      // fallback: first three tones
+}
+
 function triadFromContext() {
   const rootIdx = NOTES.indexOf(state.root);
   if (state.view === 'chord') {
-    const degs = CHORD_DEGREES[state.chord];
+    const degs = triadDegrees(state.chord);
     return { degs, required: new Set(Object.values(degs)) };
   }
   const scale = state.scale;
@@ -1141,6 +1160,37 @@ function computeShapeNotes(rootIdx, chordName, shapeName) {
     const freq = Math.round(sFreqs[si] * Math.pow(2, bestFret / 12) * 10000) / 10000;
     notes.push({ si, fret: bestFret, color, display, freq, isRoot: bestLabel === 'R' });
   }
+
+  // "Nearest chord tone" tends to double the triad tones and drop extensions, so
+  // an E7 ends up looking like E major. Make sure every chord tone appears at
+  // least once: swap a duplicated tone for any missing one within reach.
+  const pcOf = nt => (NOTES.indexOf(sNotes[nt.si]) + nt.fret) % 12;
+  const reqPcs = [...new Set(Object.keys(chordDegs).map(iv => (rootIdx + parseInt(iv)) % 12))];
+  for (const pc of reqPcs) {
+    if (notes.some(nt => pcOf(nt) === pc)) continue;
+    const counts = {};
+    for (const nt of notes) counts[pcOf(nt)] = (counts[pcOf(nt)] || 0) + 1;
+    let pick = null, pickFret = null, pickCost = 1e9;
+    for (const nt of notes) {
+      if (counts[pcOf(nt)] <= 1) continue;                 // keep unique tones intact
+      const basePos = (pc - NOTES.indexOf(sNotes[nt.si]) + 120) % 12;
+      for (let oct = -1; oct < 3; oct++) {
+        const f = basePos + oct * 12;
+        if (f >= 0 && f < N_FRETS) {
+          const cost = Math.abs(f - nt.fret);
+          if (cost < pickCost) { pickCost = cost; pick = nt; pickFret = f; }
+        }
+      }
+    }
+    if (pick && pickCost <= 3) {
+      const label = chordDegs[(pc - rootIdx + 120) % 12];
+      pick.fret = pickFret;
+      pick.isRoot = label === 'R';
+      pick.color = INTERVAL_COLORS[label] || '#888';
+      pick.display = state.labelMode === 'note' ? NOTES[pc] : label;
+      pick.freq = Math.round(sFreqs[pick.si] * Math.pow(2, pickFret / 12) * 10000) / 10000;
+    }
+  }
   return notes.length ? notes : null;
 }
 
@@ -1179,7 +1229,7 @@ function chordSetActive() {
 // top string index of the set: 0 = strings 1-2-3 … 3 = strings 4-5-6.
 function computeTriadVoicing(rootIdx, chordName, g, target) {
   if (g < 0 || g + 2 >= 6) return null;
-  const deg = CHORD_DEGREES[chordName] || CHORD_DEGREES.Major;
+  const deg = triadDegrees(chordName);   // 4-note chords reduce to a 3-note shell
   const sFreqs = INSTRUMENTS.guitar.freqs, sNotes = INSTRUMENTS.guitar.notes;
   const tonePc = {};
   for (const iv in deg) tonePc[(rootIdx + parseInt(iv)) % 12] = deg[iv];
@@ -2161,6 +2211,10 @@ function onTypeChange() {
   onSettingChange();
 }
 
+// True while selectDiatonic() is driving the selection, so navigating the chord
+// family doesn't redefine the key it belongs to.
+let selectingDiatonic = false;
+
 function onSettingChange() {
   const root = document.getElementById('sel-root').value;
   const type = document.getElementById('sel-type').value;
@@ -2174,6 +2228,12 @@ function onSettingChange() {
     state.view = 'chord'; state.chord = name || 'Major';
   } else if (type === 'scale') {
     state.view = 'scale'; state.scale = name || 'Ionian';
+  }
+  // The "Chords in Key" family is anchored to the key chosen on the fretboard;
+  // clicking a chord within the family must not re-key the whole family.
+  if (!selectingDiatonic) {
+    state.keyScale = effectiveKeyScale();
+    state.keyTonic7 = state.view === 'chord' && state.chord === '7';
   }
   buildDiatonicChips();
   updateSendPreview();
@@ -2215,7 +2275,7 @@ function clearAll() {
 
 function clearBoard() {
   state.view = 'all'; state.root = ''; state.caged.clear(); state.triadGrps.clear();
-  state.diatonic = true; state.keyRoot = '';     // Chords in Key defaults to On
+  state.diatonic = true; state.keyRoot = ''; state.keyScale = 'Ionian'; state.keyTonic7 = false;   // Chords in Key defaults to On
   updateDiatonicBtn();
   document.getElementById('sel-root').value = '';
   document.getElementById('sel-type').value = 'all';
@@ -2275,7 +2335,11 @@ function updateDiatonicBtn() {
 
 function toggleDiatonic() {
   state.diatonic = !state.diatonic;
-  if (state.diatonic && state.root) state.keyRoot = state.root;
+  if (state.diatonic && state.root) {
+    state.keyRoot = state.root;
+    state.keyScale = effectiveKeyScale();
+    state.keyTonic7 = state.view === 'chord' && state.chord === '7';
+  }
   updateDiatonicBtn();
   buildDiatonicChips();
   renderFretboard();
@@ -2294,17 +2358,23 @@ function buildDiatonicChips() {
     return;
   }
   const ki = NOTES.indexOf(state.keyRoot);
-  const scaleKey = effectiveKeyScale();
+  const scaleKey = state.keyScale || 'Ionian';
   keyLbl.textContent = 'Key of ' + state.keyRoot + ' ' + keyScaleLabel(scaleKey);
   hint.textContent = 'Tap a chord to show it on the fretboard.';
+  // If the key was set from a dominant-7 chord, read it as a blues/dominant key:
+  // the major degrees (I, IV, V) all become dominant 7ths (e.g. E7, A7, B7) while
+  // the minor and diminished chords stay as they are.
+  const tonicIsDom7 = state.keyTonic7;
   for (const d of diatonicTriads(scaleKey)) {
+    let type = d.type, roman = d.roman;
+    if (tonicIsDom7 && d.type === 'Major') { type = '7'; roman = d.roman + '7'; }
     const noteName = NOTES[(ki + d.deg) % 12];
-    const chordName = noteName + (DIATONIC_SUFFIX[d.type] || '');
-    const isActive = state.view === 'chord' && state.root === noteName && state.chord === d.type;
+    const chordName = noteName + (DIATONIC_SUFFIX[type] || '');
+    const isActive = state.view === 'chord' && state.root === noteName && state.chord === type;
     const chip = document.createElement('div');
     chip.className = 'chip keychip' + (isActive ? ' active' : '');
-    chip.innerHTML = `<span class="rn">${d.roman}</span><span class="cn">${chordName}</span>`;
-    chip.addEventListener('click', () => selectDiatonic(noteName, d.type));
+    chip.innerHTML = `<span class="rn">${roman}</span><span class="cn">${chordName}</span>`;
+    chip.addEventListener('click', () => selectDiatonic(noteName, type));
     wrap.appendChild(chip);
   }
 }
@@ -2351,11 +2421,13 @@ function sendCurrentToPlayer() {
 
 // Show one diatonic chord on the fretboard without disturbing the key tonic.
 function selectDiatonic(noteName, type) {
+  selectingDiatonic = true;                        // navigate the family without re-keying it
   document.getElementById('sel-root').value = noteName;
   document.getElementById('sel-type').value = 'chord';
   onTypeChange();                                  // populate chord names, sets state to Major
   document.getElementById('sel-name').value = type;
-  onSettingChange();                               // apply the chosen chord (keyRoot untouched)
+  onSettingChange();                               // apply the chosen chord (keyRoot/keyScale untouched)
+  selectingDiatonic = false;
 }
 
 // ── Chord Set: shares the Player's chord box ──
