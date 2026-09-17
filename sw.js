@@ -1,7 +1,8 @@
-const CACHE_NAME = 'guitar-fretboard-v3';
+const CACHE_NAME = 'guitar-fretboard-v4';
 const ASSETS = [
   '/',
   '/index.html',
+  '/theory.html',
   '/manifest.json',
   '/icons/icon-192.svg'
 ];

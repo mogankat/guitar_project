@@ -4,7 +4,7 @@
   "private": true,
   "description": "Interactive guitar and bass fretboard visualizer with scales, chords, the CAGED system, a metronome, chord-progression and tab playback, and a looper. Ships as a PWA and a Capacitor Android app.",
   "scripts": {
-    "sync:www": "cp index.html sw.js manifest.json www/ && mkdir -p www/icons && cp icons/* www/icons/",
+    "sync:www": "mkdir -p www && cp index.html theory.html sw.js manifest.json www/ && mkdir -p www/icons && cp icons/* www/icons/",
     "build:android": "npm run sync:www && cap sync android"
   },
   "repository": {
