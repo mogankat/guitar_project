@@ -66,13 +66,14 @@ button { font: inherit; color: inherit; }
 .close { width: 28px; height: 28px; font-size: 18px; line-height: 1; }
 .grip:hover, .close:hover, .fold:hover, .grip:focus-visible, .close:focus-visible, .fold:focus-visible { background: var(--chip); color: var(--fg); }
 .grip:focus-visible, .close:focus-visible, .fold:focus-visible { outline: 2px solid var(--accent); }
-.fold { width: 24px; height: 28px; font-size: 12px; margin-left: -4px; }
-.fold::before { content: '▾'; display: inline-block; transition: transform 0.15s; }
-.card.collapsed .fold::before { transform: rotate(-90deg); }
+.fold { width: 28px; height: 28px; font-size: 13px; }
+.fold::before { content: ''; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: translateY(2px) rotate(-135deg); transition: transform 0.15s; }
+.card.collapsed .fold::before { transform: translateY(-2px) rotate(45deg); }
 .card-bar h2 { cursor: pointer; user-select: none; }
 .card.collapsed .card-bar { margin-bottom: 0; }
 .card.collapsed .card-body, .card.collapsed .card-bar .tools { display: none; }
-.card.collapsed .close { margin-left: auto; }
+.card.collapsed .fold { margin-left: auto; }
 .card.collapsed { padding-top: 6px; padding-bottom: 6px; }
 .card.dragging { position: fixed; z-index: 50; margin: 0; pointer-events: none; opacity: 0.95; box-shadow: 0 14px 36px rgba(0,0,0,0.45); }
 .card.dragging .grip { cursor: grabbing; }
@@ -146,6 +147,16 @@ table.degrees .chip { min-width: 40px; }
 .tile .tn { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .fb-ico { position: absolute; top: 2px; right: 2px; font-size: 11px; }
 .tile.borrowed { border-style: dashed; }
+.tiles.row7 { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; container-type: inline-size; }
+.tiles.row7 .tile { padding: 5px 2px; }
+.tiles.row7 .tile .rn { padding: 0 8px; }
+.tiles.row7 .tile .rn, .tiles.row7 .tile .cn, .tiles.row7 .tile .tn { white-space: normal; text-overflow: clip; line-height: 1.2; overflow-wrap: anywhere; }
+@container (max-width: 400px) {
+  .tiles.row7 .tile .cn { font-size: 12.5px; }
+  .tiles.row7 .tile .tn { font-size: 9px; }
+  .tiles.row7 .tile .rn { font-size: 9px; padding: 0 7px; }
+  .tiles.row7 .tile .fb-ico { font-size: 9px; top: 1px; right: 0; padding: 1px; }
+}
 .tile.na { opacity: 0.45; cursor: default; }
 .tile.na:hover { border-color: var(--border); }
 .sel {
@@ -206,6 +217,9 @@ table.degrees .chip { min-width: 40px; }
 .kb-toggle::after { content: ' ▴'; }
 .kb.closed .kb-toggle::after { content: ' ▾'; }
 .kb-toggle:hover { border-color: var(--accent); }
+.credits { font-size: 11px; color: var(--muted); text-align: center; margin: 4px 0 18px; }
+.credits a { color: inherit; }
+.sound-status { font-size: 11px; white-space: nowrap; }
 .kb-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .kb-keys { position: relative; height: 72px; border-radius: 6px; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 .key { position: absolute; top: 0; padding: 0; cursor: pointer; }
@@ -283,6 +297,11 @@ table.ivl tr.sounding { background: color-mix(in srgb, var(--accent) 18%, transp
   <div class="kb-bar">
     <button type="button" class="kb-toggle" id="kb-toggle" aria-controls="kb-keys" aria-expanded="true" onclick="setKeyboardOpen(document.getElementById('kb').classList.contains('closed'))">Keyboard</button>
     <select class="sel" id="key-select" aria-label="Key"></select>
+    <select class="sel" id="sound-select" aria-label="Sound">
+      <option value="acoustic">Acoustic</option><option value="electric">Electric</option>
+      <option value="nylon">Nylon</option><option value="bass">Bass</option>
+    </select>
+    <span class="small muted sound-status" id="sound-status" aria-live="polite"></span>
     <span class="small muted kb-label" id="kb-label"></span>
   </div>
   <div class="kb-keys" id="kb-keys" aria-label="Piano keyboard"></div>
@@ -291,8 +310,8 @@ table.ivl tr.sounding { background: color-mix(in srgb, var(--accent) 18%, transp
 <main class="layout" id="layout">
   <section class="card wheel-card" id="wheel-card" data-card="wheel" aria-label="Circle of fifths">
     <div class="card-bar"><button type="button" class="grip" aria-label="Move the Circle of fifths card (drag, or use the arrow keys)" title="Drag to move">&#8942;&#8942;</button>
-      <button type="button" class="fold" aria-expanded="true" aria-label="Collapse the Circle of fifths card" title="Collapse / expand"></button>
       <h2>Circle of fifths</h2><span class="tools"></span>
+      <button type="button" class="fold" aria-expanded="true" aria-label="Collapse the Circle of fifths card" title="Collapse / expand"></button>
       <button type="button" class="close" aria-label="Hide the Circle of fifths card" title="Hide card">&times;</button></div>
     <div class="card-body wheel-body">
     <div class="wheel-wrap"><svg id="wheel" viewBox="0 0 440 440" role="group" aria-label="Circle of fifths"></svg></div>
@@ -308,7 +327,9 @@ table.ivl tr.sounding { background: color-mix(in srgb, var(--accent) 18%, transp
     </div>
   </section>
 </main>
+<p class="credits">Guitar &amp; bass recordings: <a href="https://github.com/nbrosowsky/tonejs-instruments" target="_blank" rel="noopener">tonejs-instruments</a> (<a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a>)</p>
 
+<script src="sampler.js"></script>
 <script>
 // ════════════════════════════════════════════════════════════════
 // THEORY
@@ -490,9 +511,14 @@ function stringBuffer(c, midi) {
   for (let i = 0; i < len; i++) { const j = i % N; d[i] = buf[j]; buf[j] = 0.9955 * (0.38 * buf[j] + 0.62 * buf[(i + 1) % N]); }
   return (A.cache[midi] = ab);
 }
-function pluck(midi, at, vel) {
+// Recorded instrument when loaded (sampler.js, same sound as the fretboard page),
+// else the synthesized string. dur: seconds to hold (default: let it ring).
+let SOUND = 'acoustic';
+function pluck(midi, at, vel, dur) {
   const c = ctx(), t0 = at || c.currentTime;
   kbFlash(midi, (t0 - c.currentTime) * 1000);
+  const freq = 440 * Math.pow(2, (midi - 69) / 12);
+  if (window.GuitarSamples && GuitarSamples.play(c, SOUND, freq, t0, vel || 1, dur ? { dur } : null)) return;
   const src = c.createBufferSource(); src.buffer = stringBuffer(c, midi);
   const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 90;
   const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3600; lp.Q.value = 0.6;
@@ -537,7 +563,10 @@ function perform(steps, btn) {
   for (const s of steps) {
     later(() => {
       const c = ctx();
-      s.midis.forEach((m, i) => pluck(m, c.currentTime + i * (s.strum || 0) / 1000, s.vel));
+      // Single notes stop when the next one is due (like a fretted run); chords ring on.
+      const hold = (s.hold || 260) / 1000;
+      const dur = s.midis.length > 1 ? Math.max(1.2, hold + 0.4) : hold + 0.15;
+      s.midis.forEach((m, i) => pluck(m, c.currentTime + i * (s.strum || 0) / 1000, s.vel, dur));
       light(s.el, s.hold || 260);
     }, s.at);
     end = Math.max(end, s.at + (s.hold || 260));
@@ -847,20 +876,25 @@ function renderChords() {
   const srcFormula = src[0] === 'key' ? (isMaj ? FORMULAS.major : FORMULAS.minor) : src[2];
   const chords = diatonic(build(t, srcFormula), S.chordView);
   // Minor keys usually borrow V (and vii°) from harmonic minor.
-  const borrowed = (isMaj || src[0] !== 'key') ? []
-    : diatonic(build(t, FORMULAS.harmonic), S.chordView).filter((c, i) => (i === 4 || i === 6) && c.valid);
+  const harm = (isMaj || src[0] !== 'key') ? [] : diatonic(build(t, FORMULAS.harmonic), S.chordView);
+  const borrowedDeg = [4, 6].filter(i => harm[i] && harm[i].valid);      // shown under V and vii
+  const borrowed = borrowedDeg.map(i => harm[i]);
   const all = chords.concat(borrowed);
   VIEW.chords = { all };
   const typeName = CHORD_TYPES.find(c => c[0] === S.chordView)[1].toLowerCase();
-  const tile = (c, i, cls = '') => {
+  // Names may wrap between root and chord type ("E♭ / maj7") in a narrow column.
+  const wrapQ = q => esc(q).replace(/\(/g, '<wbr>(');
+  const numHtml = n => String(n).replace(/^([ivxIVX]+)(.+)$/, '$1<wbr>$2').replace(/\(/g, '<wbr>(');
+  const tile = (c, i, cls = '', col = 0) => {
+    const at = col ? ` style="grid-column:${col}"` : '';
     if (!c.valid) {
-      return `<div class="tile na" title="No ${esc(typeName.replace(/s$/, '').replace(/ \(5\)/, ''))} on this degree of the scale">`
-        + `<div class="rn">${c.num}</div><div class="cn">${esc(c.root.name)} –</div><div class="tn">${c.tones.map(x => x.name).join(' ')}</div></div>`;
+      return `<div class="tile na"${at} title="No ${esc(typeName.replace(/s$/, '').replace(/ \(5\)/, ''))} on this degree of the scale">`
+        + `<div class="rn">${numHtml(c.num)}</div><div class="cn">${esc(c.root.name)} –</div><div class="tn">${c.tones.map(x => x.name).join(' ')}</div></div>`;
     }
     const q = c.sym.slice(c.root.name.length);
     const fb = FB_CHORD[q];
-    return `<div class="tile ${cls}" role="button" tabindex="0" data-chord="${i}" title="Play ${esc(c.sym)}">`
-      + `<div class="rn">${c.num}</div><div class="cn">${esc(c.sym)}</div><div class="tn">${c.tones.map(x => x.name).join(' ')}</div>`
+    return `<div class="tile ${cls}"${at} role="button" tabindex="0" data-chord="${i}" title="Play ${esc(c.sym)}">`
+      + `<div class="rn">${numHtml(c.num)}</div><div class="cn">${esc(c.root.name)}${q ? '<wbr>' + wrapQ(q) : ''}</div><div class="tn">${c.tones.map(x => x.name).join(' ')}</div>`
       + (fb ? fbIcon(fbHref(c.root.note, 'chord', fb), c.sym) : '') + `</div>`;
   };
   const keyLabel = 'Key: ' + keyName(t, S.mode);
@@ -876,7 +910,7 @@ function renderChords() {
     + `<p class="small muted" style="margin:0 0 8px">The ${esc(typeName)} built from the notes of ${esc(srcName)}`
     + `${borrowed.length ? ', plus the V and vii° usually borrowed from harmonic minor (dashed)' : ''}.`
     + `${na ? ' Degrees marked – have no ' + esc(typeName.replace(/ \(5\)/, '')) + ' in this scale.' : ''} Tap a chord to hear it.</p>`
-    + `<div class="tiles" data-group="chords">${chords.map((c, i) => tile(c, i)).join('')}${borrowed.map((c, i) => tile(c, chords.length + i, 'borrowed')).join('')}</div>`);
+    + `<div class="tiles row7" data-group="chords">${chords.map((c, i) => tile(c, i)).join('')}${borrowed.map((c, i) => tile(c, chords.length + i, 'borrowed', borrowedDeg[i] + 1)).join('')}</div>`);
 }
 
 function renderProgs() {
@@ -1072,10 +1106,10 @@ const CARD_NAMES = {
   neck: 'Scale on the neck', capo: 'Capo & transpose', intervals: 'Intervals', functions: 'Chord functions'
 };
 const DEFAULT_LAYOUT = {
-  left: ['keysig', 'quality'], center: ['wheel', 'chords', 'progs'], right: ['scale', 'modes', 'pent'],
-  hidden: ['neck', 'capo', 'intervals', 'functions']
+  left: ['chords', 'quality', 'functions'], center: ['wheel', 'keysig'], right: ['intervals', 'scale', 'modes'],
+  hidden: ['pent', 'progs', 'neck', 'capo']
 };
-const LAYOUT_VERSION = 2;          // bump to give everyone the new default layout once
+const LAYOUT_VERSION = 4;          // bump to give everyone the new default layout once
 const LOGICAL = ['left', 'center', 'right'];
 let LAYOUT = null;
 const cardEl = {};
@@ -1152,8 +1186,8 @@ function buildCards() {
     el.dataset.card = id;
     el.innerHTML =
       `<div class="card-bar"><button type="button" class="grip" aria-label="Move the ${CARD_NAMES[id]} card (drag, or use the arrow keys)" title="Drag to move">&#8942;&#8942;</button>`
-      + `<button type="button" class="fold" aria-expanded="true" aria-label="Collapse the ${CARD_NAMES[id]} card" title="Collapse / expand"></button>`
       + `<h2 id="title-${id}"></h2><span class="tools" id="tools-${id}"></span>`
+      + `<button type="button" class="fold" aria-expanded="true" aria-label="Collapse the ${CARD_NAMES[id]} card" title="Collapse / expand"></button>`
       + `<button type="button" class="close" aria-label="Hide the ${CARD_NAMES[id]} card" title="Hide card">&times;</button></div>`
       + `<div class="card-body" id="card-${id}"></div>`;
     cardEl[id] = el;
@@ -1462,7 +1496,7 @@ function renderIntervals() {
     `<p class="small muted" style="margin:0 0 6px">Play the two notes one after the other, then together.</p>`
     + `<table class="ivl">` + VIEW.intervals.map((r, k) =>
       `<tr data-group="ivl${k}"><td>${playBtn('ivl', 'Play ' + r.name, `data-k="${k}"`)}</td>`
-      + `<td class="muted">${r.note.semis} fret${r.note.semis > 1 ? 's' : ''}</td><td>${r.name}</td><td class="ab">${r.ab}</td>`
+      + `<td class="muted">${r.note.semis} step${r.note.semis > 1 ? 's' : ''}</td><td>${r.name}</td><td class="ab">${r.ab}</td>`
       + `<td><span class="chip static root">${esc(nameOf(t))}</span> → <span class="chip static">${esc(r.note.name)}</span></td></tr>`).join('')
     + `</table>`);
 }
@@ -1542,6 +1576,24 @@ function buildKeyboard() {
   try { const v = localStorage.getItem('theoryKb'); if (v) open = v === 'open'; } catch (e) {}
   setKeyboardOpen(open, false);
 }
+// Sound picker, shared with the fretboard page.
+function setSound(v) {
+  if (!window.GuitarSamples || !GuitarSamples.SETS[v]) v = 'acoustic';
+  SOUND = v;
+  document.getElementById('sound-select').value = v;
+  try { localStorage.setItem('fbSound', v); } catch (e) {}
+  if (window.GuitarSamples) GuitarSamples.load(v);             // start loading; no test note
+  updateSoundStatus();
+}
+function updateSoundStatus() {
+  const el = document.getElementById('sound-status');
+  if (!el || !window.GuitarSamples) return;
+  const st = GuitarSamples.status(SOUND);
+  el.textContent = st === 'loading' ? 'Loading…' : st === 'failed' ? 'Synth sound' : '';
+}
+if (window.GuitarSamples) GuitarSamples.onChange(updateSoundStatus);
+document.getElementById('sound-select').addEventListener('change', e => setSound(e.target.value));
+
 function setKeyboardOpen(open, remember = true) {
   document.getElementById('kb').classList.toggle('closed', !open);
   const b = document.getElementById('kb-toggle');
@@ -1611,6 +1663,7 @@ applyCollapsed();
 let savedTheme = 'dark';
 try { savedTheme = localStorage.getItem('fbTheme') || 'dark'; } catch (e) {}
 setTheme(savedTheme !== 'light');
+{ let v = 'acoustic'; try { v = localStorage.getItem('fbSound') || 'acoustic'; } catch (e) {} setSound(v); }
 keyFromHash();
 render();
 </script>
